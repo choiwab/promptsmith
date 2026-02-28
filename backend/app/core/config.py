@@ -47,7 +47,7 @@ def get_settings() -> Settings:
         app_image_dir=image_dir,
         app_artifact_dir=artifact_dir,
         app_compare_threshold=_parse_float("APP_COMPARE_THRESHOLD", 0.30),
-        openai_timeout_seconds=_parse_float("OPENAI_TIMEOUT_SECONDS", 45.0),
+        openai_timeout_seconds=_parse_float("OPENAI_TIMEOUT_SECONDS", 120.0),
     )
 
 

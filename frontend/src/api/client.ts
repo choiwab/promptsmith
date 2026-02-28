@@ -10,7 +10,20 @@ import type {
   RequestError
 } from "./types";
 
-const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 130000;
+const API_TIMEOUT_MS = (() => {
+  const raw = import.meta.env.VITE_API_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return DEFAULT_TIMEOUT_MS;
+})();
 
 export class ApiClientError extends Error {
   public readonly code: string;
@@ -99,7 +112,7 @@ export class ApiClient {
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {

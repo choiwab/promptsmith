@@ -149,6 +149,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   generateCommit: async (prompt, seed) => {
+    const startedAtMs = Date.now();
+    const knownCommitIds = new Set(get().history.map((item) => item.commit_id));
+
     set((state) => ({
       requestStates: setRequestState(state, "generate", "loading"),
       lastError: undefined,
@@ -190,6 +193,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().fetchHistory();
     } catch (error: unknown) {
       const parsed = toRequestError(error, "generate");
+
+      if (parsed.code === "REQUEST_TIMEOUT") {
+        try {
+          const historyResponse = normalizeHistoryResponse(await apiClient.getHistory(get().projectId));
+          const recoveredCommit = historyResponse.items.find((item) => {
+            if (knownCommitIds.has(item.commit_id)) {
+              return false;
+            }
+            if (item.status !== "success" || item.prompt !== prompt) {
+              return false;
+            }
+
+            const createdAtMs = Date.parse(item.created_at);
+            if (Number.isNaN(createdAtMs)) {
+              return true;
+            }
+            return createdAtMs >= startedAtMs - 120_000;
+          });
+
+          if (recoveredCommit) {
+            set((state) => ({
+              history: historyResponse.items,
+              nextCursor: historyResponse.next_cursor,
+              activeBaselineCommitId: historyResponse.active_baseline_commit_id ?? state.activeBaselineCommitId,
+              selectedCommitId: recoveredCommit.commit_id,
+              requestStates: setRequestState(state, "generate", "success"),
+              lastError: undefined,
+              toasts: pushToastState(state, {
+                id: `${Date.now()}-gen-timeout-recovered`,
+                kind: "success",
+                message: `Generation completed as ${recoveredCommit.commit_id}.`
+              })
+            }));
+            return;
+          }
+
+          set((state) => ({
+            history: historyResponse.items,
+            nextCursor: historyResponse.next_cursor,
+            activeBaselineCommitId: historyResponse.active_baseline_commit_id ?? state.activeBaselineCommitId
+          }));
+        } catch {
+          // Keep the original timeout error if follow-up history reconciliation fails.
+        }
+      }
+
       set((state) => ({
         requestStates: setRequestState(state, "generate", "error"),
         lastError: parsed,

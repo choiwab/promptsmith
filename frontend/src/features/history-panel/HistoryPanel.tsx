@@ -23,6 +23,7 @@ export const HistoryPanel = () => {
   const setBaseline = useAppStore((state) => state.setBaseline);
   const compareCommit = useAppStore((state) => state.compareCommit);
   const setSelectedCommit = useAppStore((state) => state.setSelectedCommit);
+  const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
   return (
     <section className="panel panel--history">
@@ -37,6 +38,7 @@ export const HistoryPanel = () => {
         {history.map((item) => {
           const isBaseline = baselineId === item.commit_id;
           const isSelected = selectedCommitId === item.commit_id;
+          const previewUrl = resolveAssetUrl(item.image_paths?.[0]);
 
           return (
             <li
@@ -52,6 +54,12 @@ export const HistoryPanel = () => {
                 <Badge variant="status">{item.status}</Badge>
                 {isBaseline ? <Badge variant="baseline">Baseline</Badge> : null}
               </div>
+
+              {previewUrl ? (
+                <img className="history-item__thumb" src={previewUrl} alt={`${item.commit_id} preview`} loading="lazy" />
+              ) : (
+                <div className="history-item__thumb history-item__thumb--placeholder">No image preview</div>
+              )}
 
               <div className="history-item__actions">
                 <Button
