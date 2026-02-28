@@ -209,6 +209,7 @@ export const LineageGraph = ({
   const nodeDragRef = useRef<NodeDragSession | null>(null);
   const canvasGestureRef = useRef<CanvasGestureSession | null>(null);
   const suppressClickCommitRef = useRef<string | null>(null);
+  const skipNextPersistRef = useRef(true);
   const [tooltipDirections, setTooltipDirections] = useState<Record<string, TooltipDirection>>({});
   const [nodePositions, setNodePositions] = useState<Record<string, NodePoint>>(() => persistedNodePositions ?? {});
   const [multiSelectedCommitIds, setMultiSelectedCommitIds] = useState<string[]>([]);
@@ -235,6 +236,8 @@ export const LineageGraph = ({
   }, [nodes]);
 
   useEffect(() => {
+    // Prevent cross-project bleed: skip persisting once while rehydrating this scope.
+    skipNextPersistRef.current = true;
     setNodePositions(persistedNodePositions ?? {});
     setMultiSelectedCommitIds([]);
   }, [positionsScopeKey, persistedNodePositions]);
@@ -262,6 +265,10 @@ export const LineageGraph = ({
 
   useEffect(() => {
     if (!onNodePositionsChange) {
+      return;
+    }
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
       return;
     }
     onNodePositionsChange(nodePositions);
