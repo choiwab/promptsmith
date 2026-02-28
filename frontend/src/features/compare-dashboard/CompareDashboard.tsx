@@ -16,10 +16,11 @@ const ScoreRow = ({ label, value }: { label: string; value: number }) => {
   );
 };
 
-const PreviewCard = ({ title, imageUrl }: { title: string; imageUrl?: string }) => {
+const PreviewCard = ({ title, prompt, imageUrl }: { title: string; prompt?: string; imageUrl?: string }) => {
   return (
     <article className="preview-card">
       <h4>{title}</h4>
+      {prompt ? <p className="preview-card__prompt">{prompt}</p> : null}
       {imageUrl ? (
         <img src={imageUrl} alt={`${title} preview`} />
       ) : (
@@ -101,8 +102,16 @@ export const CompareDashboard = () => {
           </div>
 
           <div className="preview-grid">
-            <PreviewCard title={`Baseline (${compareResult.baseline_commit_id})`} imageUrl={baselinePreview} />
-            <PreviewCard title={`Candidate (${compareResult.candidate_commit_id})`} imageUrl={candidatePreview} />
+            <PreviewCard
+              title={`Baseline (${compareResult.baseline_commit_id})`}
+              prompt={baselineCommit?.prompt}
+              imageUrl={baselinePreview}
+            />
+            <PreviewCard
+              title={`Candidate (${compareResult.candidate_commit_id})`}
+              prompt={candidateCommit?.prompt}
+              imageUrl={candidatePreview}
+            />
           </div>
 
           <section className="artifact-viewer">

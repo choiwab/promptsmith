@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 
@@ -14,6 +15,9 @@ from backend.app.storage.schemas import (
     ProjectRecord,
     utc_now_iso,
 )
+from backend.app.storage.supabase_mirror import SupabaseMirror
+
+logger = logging.getLogger("promptsmith.backend")
 
 
 def _model_validate(model_cls, payload):
@@ -33,6 +37,7 @@ class Repository:
         self.settings = settings
         self.store = FileStore()
         self._lock = threading.Lock()
+        self.supabase_mirror = SupabaseMirror(settings) if settings.supabase_enabled else None
 
         self.projects_path = self.settings.app_data_dir / "projects.json"
         self.commits_path = self.settings.app_data_dir / "commits.json"
@@ -43,6 +48,8 @@ class Repository:
 
     def _bootstrap(self) -> None:
         self.settings.ensure_directories()
+        # Local JSON storage remains the baseline source of truth and cache.
+        # Optional Supabase sync mirrors entities for remote durability.
         if not self.projects_path.exists():
             self.store.atomic_write_json(self.projects_path, {"items": []})
         if not self.commits_path.exists():
@@ -76,6 +83,11 @@ class Repository:
 
     def _save_projects(self, items: list[ProjectRecord]) -> None:
         self._write_collection(self.projects_path, [_model_dump(i) for i in items])
+
+    def list_projects(self) -> list[ProjectRecord]:
+        projects = self._load_projects()
+        projects.sort(key=lambda item: item.updated_at, reverse=True)
+        return projects
 
     def _load_commits(self) -> list[CommitRecord]:
         return [_model_validate(CommitRecord, i) for i in self._read_collection(self.commits_path)]
@@ -116,12 +128,20 @@ class Repository:
             self._save_config(config)
             return report_id
 
-    def ensure_project(self, project_id: str, name: str | None = None) -> ProjectRecord:
+    def upsert_project(self, project_id: str, name: str | None = None) -> tuple[ProjectRecord, bool]:
         with self._lock:
             projects = self._load_projects()
-            existing = next((p for p in projects if p.project_id == project_id), None)
+            existing_index = next((idx for idx, p in enumerate(projects) if p.project_id == project_id), None)
+            existing = projects[existing_index] if existing_index is not None else None
             if existing:
-                return existing
+                if name and name != existing.name:
+                    existing.name = name
+                    existing.updated_at = utc_now_iso()
+                    projects[existing_index] = existing
+                    self._save_projects(projects)
+                    self._sync_project(existing)
+                return existing, False
+
             now = utc_now_iso()
             project = ProjectRecord(
                 project_id=project_id,
@@ -132,7 +152,12 @@ class Repository:
             )
             projects.append(project)
             self._save_projects(projects)
-            return project
+            self._sync_project(project)
+            return project, True
+
+    def ensure_project(self, project_id: str, name: str | None = None) -> ProjectRecord:
+        project, _ = self.upsert_project(project_id, name)
+        return project
 
     def get_project(self, project_id: str) -> ProjectRecord:
         projects = self._load_projects()
@@ -153,6 +178,7 @@ class Repository:
         prompt: str,
         model: str,
         seed: str | None,
+        parent_commit_id: str | None,
         image_paths: list[str],
         status: str,
         error: str | None,
@@ -165,6 +191,7 @@ class Repository:
                 prompt=prompt,
                 model=model,
                 seed=seed,
+                parent_commit_id=parent_commit_id,
                 image_paths=image_paths,
                 status=status,
                 error=error,
@@ -172,6 +199,7 @@ class Repository:
             )
             commits.append(commit)
             self._save_commits(commits)
+            self._sync_commit(commit)
             return commit
 
     def get_commit(self, commit_id: str, project_id: str | None = None) -> CommitRecord:
@@ -222,6 +250,7 @@ class Repository:
                     updated.append(item)
 
             self._save_projects(updated)
+            self._sync_project(project)
             return project
 
     def list_history(self, project_id: str, limit: int, cursor: str | None) -> tuple[list[CommitRecord], str | None]:
@@ -246,4 +275,54 @@ class Repository:
             reports = self._load_comparisons()
             reports.append(report)
             self._save_comparisons(reports)
+            self._sync_comparison_report(report)
             return report
+
+    def upload_commit_image(self, *, commit_id: str, filename: str, payload: bytes) -> str | None:
+        if self.supabase_mirror is None:
+            return None
+        try:
+            return self.supabase_mirror.upload_commit_image(
+                commit_id=commit_id,
+                filename=filename,
+                payload=payload,
+            )
+        except Exception as exc:
+            logger.warning(
+                "supabase_image_sync_failed",
+                extra={"extra_fields": {"commit_id": commit_id, "error": str(exc)}},
+            )
+            return None
+
+    def _sync_project(self, project: ProjectRecord) -> None:
+        if self.supabase_mirror is None:
+            return
+        try:
+            self.supabase_mirror.upsert_project(project)
+        except Exception as exc:
+            logger.warning(
+                "supabase_project_sync_failed",
+                extra={"extra_fields": {"project_id": project.project_id, "error": str(exc)}},
+            )
+
+    def _sync_commit(self, commit: CommitRecord) -> None:
+        if self.supabase_mirror is None:
+            return
+        try:
+            self.supabase_mirror.upsert_commit(commit)
+        except Exception as exc:
+            logger.warning(
+                "supabase_commit_sync_failed",
+                extra={"extra_fields": {"commit_id": commit.commit_id, "error": str(exc)}},
+            )
+
+    def _sync_comparison_report(self, report: ComparisonReportRecord) -> None:
+        if self.supabase_mirror is None:
+            return
+        try:
+            self.supabase_mirror.upsert_comparison(report)
+        except Exception as exc:
+            logger.warning(
+                "supabase_comparison_sync_failed",
+                extra={"extra_fields": {"report_id": report.report_id, "error": str(exc)}},
+            )

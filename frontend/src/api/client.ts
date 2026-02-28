@@ -4,9 +4,12 @@ import type {
   BaselineResponse,
   CompareRequest,
   CompareResponse,
+  EnsureProjectRequest,
+  EnsureProjectResponse,
   GenerateRequest,
   GenerateResponse,
   HistoryResponse,
+  ListProjectsResponse,
   RequestError
 } from "./types";
 
@@ -90,6 +93,19 @@ export class ApiClient {
     }
 
     return this.request<HistoryResponse>(`/history?${search.toString()}`, {
+      method: "GET"
+    });
+  }
+
+  async ensureProject(payload: EnsureProjectRequest): Promise<EnsureProjectResponse> {
+    return this.request<EnsureProjectResponse>("/projects", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async listProjects(): Promise<ListProjectsResponse> {
+    return this.request<ListProjectsResponse>("/projects", {
       method: "GET"
     });
   }

@@ -24,6 +24,7 @@ class CommitRecord(BaseModel):
     prompt: str
     model: str
     seed: str | None = None
+    parent_commit_id: str | None = None
     image_paths: list[str] = Field(default_factory=list)
     status: Literal["success", "failed"]
     error: str | None = None

@@ -9,16 +9,18 @@ import type {
   RequestError
 } from "../api/types";
 
-type OperationKey = "history" | "generate" | "baseline" | "compare";
+type OperationKey = "project" | "history" | "generate" | "baseline" | "compare";
 
 type LastOperation =
+  | { kind: "project"; projectId: string; name?: string }
   | { kind: "history" }
-  | { kind: "generate"; prompt: string; model: string; seed?: string }
+  | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string }
   | { kind: "baseline"; commitId: string }
   | { kind: "compare"; commitId: string }
   | null;
 
 interface RequestStates {
+  project: AsyncState;
   history: AsyncState;
   generate: AsyncState;
   baseline: AsyncState;
@@ -41,8 +43,9 @@ interface AppState {
   dismissToast: (id: string) => void;
   pushToast: (kind: AppToast["kind"], message: string) => void;
   clearError: () => void;
+  setProject: (projectId: string, name?: string) => Promise<void>;
   fetchHistory: () => Promise<void>;
-  generateCommit: (prompt: string, seed?: string) => Promise<void>;
+  generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
   setBaseline: (commitId: string) => Promise<void>;
   compareCommit: (commitId: string) => Promise<void>;
   retryLastOperation: () => Promise<void>;
@@ -50,6 +53,7 @@ interface AppState {
 }
 
 const initialRequestStates: RequestStates = {
+  project: "idle",
   history: "idle",
   generate: "idle",
   baseline: "idle",
@@ -115,6 +119,57 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ lastError: undefined });
   },
 
+  setProject: async (projectId, name) => {
+    const trimmedProjectId = projectId.trim();
+    const trimmedName = name?.trim() || undefined;
+    if (!trimmedProjectId) {
+      return;
+    }
+
+    set((state) => ({
+      requestStates: setRequestState(state, "project", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "project", projectId: trimmedProjectId, name: trimmedName }
+    }));
+
+    try {
+      const response = await apiClient.ensureProject({
+        project_id: trimmedProjectId,
+        name: trimmedName
+      });
+
+      set((state) => ({
+        projectId: response.project_id,
+        history: [],
+        nextCursor: undefined,
+        activeBaselineCommitId: response.active_baseline_commit_id,
+        selectedCommitId: undefined,
+        latestCompareResult: undefined,
+        requestStates: setRequestState(state, "project", "success"),
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-project`,
+          kind: "info",
+          message: response.created
+            ? `Created project ${response.project_id}.`
+            : `Loaded project ${response.project_id}.`
+        })
+      }));
+
+      await get().fetchHistory();
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "project");
+      set((state) => ({
+        requestStates: setRequestState(state, "project", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-project-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
   fetchHistory: async () => {
     set((state) => ({
       requestStates: setRequestState(state, "history", "loading"),
@@ -141,6 +196,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error: unknown) {
       const parsed = toRequestError(error, "history");
+
+      if (parsed.code === "PROJECT_NOT_FOUND") {
+        try {
+          await apiClient.ensureProject({ project_id: get().projectId });
+          const response = normalizeHistoryResponse(await apiClient.getHistory(get().projectId));
+
+          set((state) => {
+            const selectedCommitId =
+              state.selectedCommitId && response.items.some((item) => item.commit_id === state.selectedCommitId)
+                ? state.selectedCommitId
+                : response.items[0]?.commit_id;
+
+            return {
+              history: response.items,
+              nextCursor: response.next_cursor,
+              activeBaselineCommitId: response.active_baseline_commit_id ?? state.activeBaselineCommitId,
+              selectedCommitId,
+              requestStates: setRequestState(state, "history", "success")
+            };
+          });
+          return;
+        } catch {
+          // Keep the original project-not-found error if ensure+retry fails.
+        }
+      }
+
       set((state) => ({
         requestStates: setRequestState(state, "history", "error"),
         lastError: parsed
@@ -148,14 +229,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  generateCommit: async (prompt, seed) => {
+  generateCommit: async (prompt, seed, parentCommitId) => {
     const startedAtMs = Date.now();
     const knownCommitIds = new Set(get().history.map((item) => item.commit_id));
 
     set((state) => ({
       requestStates: setRequestState(state, "generate", "loading"),
       lastError: undefined,
-      lastOperation: { kind: "generate", prompt, model: state.model, seed }
+      lastOperation: { kind: "generate", prompt, model: state.model, seed, parentCommitId }
     }));
 
     try {
@@ -163,7 +244,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         project_id: get().projectId,
         prompt,
         model: get().model,
-        seed: seed || undefined
+        seed: seed || undefined,
+        parent_commit_id: parentCommitId || undefined
       });
 
       set((state) => {
@@ -171,7 +253,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           commit_id: response.commit_id,
           status: response.status,
           created_at: response.created_at,
-          prompt,
+          prompt: response.prompt || prompt,
+          parent_commit_id: response.parent_commit_id,
           image_paths: response.image_paths
         };
 
@@ -350,8 +433,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    if (op.kind === "project") {
+      await get().setProject(op.projectId, op.name);
+      return;
+    }
+
     if (op.kind === "generate") {
-      await get().generateCommit(op.prompt, op.seed);
+      await get().generateCommit(op.prompt, op.seed, op.parentCommitId);
       return;
     }
 

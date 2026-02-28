@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from backend.app.core.config import Settings
 from backend.app.core.errors import ApiError, ErrorCode
@@ -163,7 +166,11 @@ class CompareOrchestrator:
                 status_code=404,
             )
 
-        path = Path(image_paths[0])
+        first = image_paths[0]
+        if first.startswith("http://") or first.startswith("https://"):
+            return self._download_remote_image(first)
+
+        path = Path(first)
         if not path.is_absolute():
             path = (Path.cwd() / path).resolve()
 
@@ -175,3 +182,23 @@ class CompareOrchestrator:
             )
 
         return path
+
+    def _download_remote_image(self, image_url: str) -> Path:
+        digest = hashlib.sha1(image_url.encode("utf-8")).hexdigest()
+        cache_path = self.settings.app_data_dir / "remote_image_cache" / f"{digest}.png"
+
+        if cache_path.exists():
+            return cache_path
+
+        try:
+            response = httpx.get(image_url, timeout=self.settings.openai_timeout_seconds)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ApiError(
+                ErrorCode.COMPARE_PIPELINE_FAILED,
+                f"Failed to fetch remote image artifact: {exc}",
+                status_code=500,
+            ) from exc
+
+        self.repository.store.atomic_write_bytes(cache_path, response.content)
+        return cache_path

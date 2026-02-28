@@ -2,6 +2,7 @@ import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { useBaselineCommitId, useHistory, useRequestStates, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
+import { LineageGraph } from "./LineageGraph";
 
 const formatDate = (value: string): string => {
   const date = new Date(value);
@@ -24,6 +25,7 @@ export const HistoryPanel = () => {
   const compareCommit = useAppStore((state) => state.compareCommit);
   const setSelectedCommit = useAppStore((state) => state.setSelectedCommit);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
+  const selectedCommit = history.find((item) => item.commit_id === selectedCommitId);
 
   return (
     <section className="panel panel--history">
@@ -55,6 +57,8 @@ export const HistoryPanel = () => {
                 {isBaseline ? <Badge variant="baseline">Baseline</Badge> : null}
               </div>
 
+              <p className="history-item__prompt">{item.prompt || "Prompt unavailable."}</p>
+
               {previewUrl ? (
                 <img className="history-item__thumb" src={previewUrl} alt={`${item.commit_id} preview`} loading="lazy" />
               ) : (
@@ -83,6 +87,23 @@ export const HistoryPanel = () => {
           );
         })}
       </ul>
+
+      <section className="lineage-section">
+        <header className="lineage-section__header">
+          <h3>Lineage Graph</h3>
+          <p>
+            {selectedCommit
+              ? `Selected ${selectedCommit.commit_id}${selectedCommit.parent_commit_id ? ` from ${selectedCommit.parent_commit_id}` : " (root)"}`
+              : "Select a commit to inspect lineage."}
+          </p>
+        </header>
+        <LineageGraph
+          items={history}
+          selectedCommitId={selectedCommitId}
+          baselineCommitId={baselineId}
+          onSelect={(commitId) => setSelectedCommit(commitId)}
+        />
+      </section>
     </section>
   );
 };

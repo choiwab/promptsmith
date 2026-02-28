@@ -13,11 +13,14 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=5)
     model: str = Field(min_length=1)
     seed: str | None = None
+    parent_commit_id: str | None = None
 
 
 class GenerateResponse(BaseModel):
     commit_id: str
     status: str
+    prompt: str
+    parent_commit_id: str | None = None
     image_paths: list[str]
     created_at: str
 
@@ -30,10 +33,13 @@ async def generate(payload: GenerateRequest, request: Request) -> GenerateRespon
         prompt=payload.prompt,
         model=payload.model,
         seed=payload.seed,
+        parent_commit_id=payload.parent_commit_id,
     )
     return GenerateResponse(
         commit_id=commit.commit_id,
         status=commit.status,
+        prompt=commit.prompt,
+        parent_commit_id=commit.parent_commit_id,
         image_paths=commit.image_paths,
         created_at=commit.created_at,
     )

@@ -14,6 +14,7 @@ from backend.app.api.routes_baseline import router as baseline_router
 from backend.app.api.routes_compare import router as compare_router
 from backend.app.api.routes_generate import router as generate_router
 from backend.app.api.routes_history import router as history_router
+from backend.app.api.routes_projects import router as projects_router
 from backend.app.core.config import get_settings
 from backend.app.core.errors import ApiError, ErrorCode, error_response, request_id_from_request
 from backend.app.core.logging import configure_logging
@@ -46,14 +47,6 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -148,6 +141,7 @@ def create_app() -> FastAPI:
     app.include_router(baseline_router)
     app.include_router(compare_router)
     app.include_router(history_router)
+    app.include_router(projects_router)
 
     return app
 

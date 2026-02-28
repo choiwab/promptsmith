@@ -11,6 +11,7 @@ router = APIRouter(tags=["history"])
 class HistoryItem(BaseModel):
     commit_id: str
     prompt: str
+    parent_commit_id: str | None = None
     image_paths: list[str] = Field(default_factory=list)
     status: str
     created_at: str
@@ -41,6 +42,7 @@ async def history(
             HistoryItem(
                 commit_id=commit.commit_id,
                 prompt=commit.prompt,
+                parent_commit_id=commit.parent_commit_id,
                 image_paths=commit.image_paths,
                 status=commit.status,
                 created_at=commit.created_at,

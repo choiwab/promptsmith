@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
 import { Button } from "../../components/Button";
 import { LoadingState } from "../../components/LoadingState";
-import { useRequestStates } from "../../state/selectors";
+import { useRequestStates, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 
 export const PromptWorkbench = () => {
   const minPromptLength = 5;
   const [prompt, setPrompt] = useState("");
   const [seed, setSeed] = useState("");
+  const [linkToSelected, setLinkToSelected] = useState(true);
+  const selectedCommitId = useSelectedCommitId();
   const generateCommit = useAppStore((state) => state.generateCommit);
   const requestStates = useRequestStates();
   const promptLength = prompt.trim().length;
+  const parentCommitId = linkToSelected ? selectedCommitId : undefined;
 
   const canSubmit = useMemo(() => {
     return promptLength >= minPromptLength && requestStates.generate !== "loading";
@@ -22,7 +25,7 @@ export const PromptWorkbench = () => {
       return;
     }
 
-    await generateCommit(trimmed, seed.trim() || undefined);
+    await generateCommit(trimmed, seed.trim() || undefined, parentCommitId);
     setPrompt("");
   };
 
@@ -56,6 +59,20 @@ export const PromptWorkbench = () => {
         onChange={(event) => setSeed(event.target.value)}
         placeholder="1234"
       />
+
+      <label className="checkbox-field" htmlFor="lineage-parent-toggle">
+        <input
+          id="lineage-parent-toggle"
+          type="checkbox"
+          checked={linkToSelected}
+          disabled={!selectedCommitId}
+          onChange={(event) => setLinkToSelected(event.target.checked)}
+        />
+        <span>
+          Use selected commit as lineage parent
+          {selectedCommitId ? <strong> ({selectedCommitId})</strong> : " (none selected)"}
+        </span>
+      </label>
 
       <div className="panel__actions">
         <Button variant="primary" loading={requestStates.generate === "loading"} disabled={!canSubmit} onClick={onSubmit}>

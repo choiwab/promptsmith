@@ -1,31 +1,38 @@
 :root {
-  --font-heading: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  --font-body: "IBM Plex Sans", "Trebuchet MS", sans-serif;
+  --font-heading: "Mona Sans", "Hubot Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-body: "Mona Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --bg: #f5f2ea;
-  --bg-panel: #fffdf7;
-  --bg-soft: #ece7db;
-  --text: #1f2a32;
-  --text-muted: #5f6971;
-  --border: #d7d0c2;
+  --bg: #f6f8fa;
+  --bg-subtle: #eef2f7;
+  --bg-panel: #ffffff;
+  --bg-canvas: #f3f4f6;
+  --text: #1f2328;
+  --text-muted: #57606a;
+  --border: #d0d7de;
+  --border-strong: #8c959f;
 
-  --brand: #1b8a79;
-  --brand-strong: #0d6458;
-  --danger: #c23b22;
-  --danger-strong: #992f1b;
-  --warning: #b07d12;
-  --warning-bg: #fff5df;
-  --success: #1f7a1f;
-  --success-bg: #e7f6e7;
-  --fail: #a12323;
-  --fail-bg: #fde8e8;
+  --accent: #0969da;
+  --accent-strong: #0550ae;
+  --accent-soft: #ddf4ff;
+  --danger: #cf222e;
+  --danger-soft: #ffebe9;
+  --warning: #9a6700;
+  --warning-soft: #fff8c5;
+  --success: #1a7f37;
+  --success-soft: #dafbe1;
+
+  --pass: #1a7f37;
+  --pass-bg: #dafbe1;
+  --fail: #cf222e;
+  --fail-bg: #ffebe9;
   --inconclusive: #9a6700;
-  --inconclusive-bg: #fff3d6;
+  --inconclusive-bg: #fff8c5;
 
-  --shadow: 0 14px 28px -20px rgba(35, 49, 61, 0.6);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 0 rgba(27, 31, 36, 0.04), 0 1px 3px rgba(27, 31, 36, 0.1);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -51,8 +58,8 @@ body {
   font-family: var(--font-body);
   color: var(--text);
   background:
-    radial-gradient(circle at 8% 4%, #fff8e8 0%, transparent 35%),
-    radial-gradient(circle at 94% 1%, #d6efe6 0%, transparent 25%),
+    radial-gradient(1200px 500px at -8% -20%, #dff0ff 0%, transparent 40%),
+    radial-gradient(900px 420px at 108% 120%, #e8f5ff 0%, transparent 42%),
     var(--bg);
 }
 
@@ -62,7 +69,7 @@ h3,
 h4 {
   margin: 0;
   font-family: var(--font-heading);
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 p {
@@ -79,7 +86,8 @@ textarea {
 
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid rgba(27, 138, 121, 0.35);
+textarea:focus-visible,
+svg [role="button"]:focus-visible {
+  outline: 2px solid rgba(9, 105, 218, 0.5);
   outline-offset: 2px;
 }

@@ -16,11 +16,20 @@ class Settings:
     app_artifact_dir: Path
     app_compare_threshold: float
     openai_timeout_seconds: float
+    supabase_url: str | None
+    supabase_service_role_key: str | None
+    supabase_storage_bucket: str
+    supabase_table_prefix: str
+    supabase_schema: str
 
     def ensure_directories(self) -> None:
         self.app_data_dir.mkdir(parents=True, exist_ok=True)
         self.app_image_dir.mkdir(parents=True, exist_ok=True)
         self.app_artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_role_key)
 
 
 def _parse_float(name: str, default: float) -> float:
@@ -48,6 +57,11 @@ def get_settings() -> Settings:
         app_artifact_dir=artifact_dir,
         app_compare_threshold=_parse_float("APP_COMPARE_THRESHOLD", 0.30),
         openai_timeout_seconds=_parse_float("OPENAI_TIMEOUT_SECONDS", 120.0),
+        supabase_url=os.getenv("SUPABASE_URL"),
+        supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY"),
+        supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "promptsmith-images"),
+        supabase_table_prefix=os.getenv("SUPABASE_TABLE_PREFIX", "promptsmith_"),
+        supabase_schema=os.getenv("SUPABASE_SCHEMA", "public"),
     )
 
 

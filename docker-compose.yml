@@ -19,6 +19,11 @@ services:
       APP_IMAGE_DIR: /workspace/images
       APP_ARTIFACT_DIR: /workspace/artifacts
       APP_COMPARE_THRESHOLD: ${APP_COMPARE_THRESHOLD:-0.30}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-promptsmith-images}
+      SUPABASE_TABLE_PREFIX: ${SUPABASE_TABLE_PREFIX:-promptsmith_}
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-public}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

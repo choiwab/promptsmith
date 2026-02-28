@@ -56,6 +56,7 @@ def main() -> None:
     commit_ids: list[str] = []
     for variant in [1, 2, 3]:
         commit_id = repository.reserve_commit_id()
+        parent_commit_id = commit_ids[-1] if commit_ids else None
         commit_ids.append(commit_id)
 
         image = _create_demo_image(variant)
@@ -68,6 +69,7 @@ def main() -> None:
             prompt=f"demo prompt variant {variant}",
             model=settings.openai_image_model,
             seed=str(1000 + variant),
+            parent_commit_id=parent_commit_id,
             image_paths=[to_relative_path(image_path)],
             status="success",
             error=None,

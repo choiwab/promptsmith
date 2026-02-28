@@ -38,6 +38,42 @@ VITE_API_BASE_URL=http://localhost:8000
 VITE_APP_NAME=Promptsmith
 ```
 
+Backend also supports optional Supabase mirroring for commit prompts + generated images.
+Set these values in `.env` / Docker env if you want Supabase persistence:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+SUPABASE_STORAGE_BUCKET=promptsmith-images
+SUPABASE_TABLE_PREFIX=promptsmith_
+SUPABASE_SCHEMA=public
+```
+
+Before enabling it, run `backend/supabase/schema.sql` in Supabase SQL Editor.
+
+## Public Access
+- No login is required in this app.
+- Backend APIs are open, and the Supabase schema in `backend/supabase/schema.sql` is configured for anonymous full read/write/delete access.
+- Anyone with the project URL can view and modify repository data.
+
+## Projects API
+Create a project if missing (or load existing):
+
+```bash
+curl -X POST http://localhost:8000/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "my-new-project",
+    "name": "My New Project"
+  }'
+```
+
+List projects:
+
+```bash
+curl http://localhost:8000/projects
+```
+
 ## Scripts
 - `pnpm dev:frontend` - Run Vite frontend dev server
 - `pnpm dev` - Alias for `pnpm dev:frontend`

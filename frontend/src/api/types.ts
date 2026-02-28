@@ -15,11 +15,14 @@ export interface GenerateRequest {
   prompt: string;
   model: string;
   seed?: string;
+  parent_commit_id?: string;
 }
 
 export interface GenerateResponse {
   commit_id: string;
   status: string;
+  prompt: string;
+  parent_commit_id?: string;
   image_paths: string[];
   created_at: string;
 }
@@ -67,6 +70,7 @@ export interface CompareResponse {
 export interface HistoryItem {
   commit_id: string;
   prompt?: string;
+  parent_commit_id?: string;
   status: string;
   created_at: string;
   image_paths?: string[];
@@ -78,12 +82,33 @@ export interface HistoryResponse {
   active_baseline_commit_id?: string;
 }
 
+export interface Project {
+  project_id: string;
+  name: string;
+  active_baseline_commit_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnsureProjectRequest {
+  project_id: string;
+  name?: string;
+}
+
+export interface EnsureProjectResponse extends Project {
+  created: boolean;
+}
+
+export interface ListProjectsResponse {
+  items: Project[];
+}
+
 export interface RequestError {
   code: string;
   message: string;
   requestId?: string;
   status: number;
-  operation?: "history" | "generate" | "baseline" | "compare";
+  operation?: "project" | "history" | "generate" | "baseline" | "compare";
   retryable: boolean;
 }
 

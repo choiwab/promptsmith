@@ -21,8 +21,11 @@ class GenerationService:
         prompt: str,
         model: str,
         seed: str | None,
+        parent_commit_id: str | None,
     ):
         self.repository.ensure_project(project_id)
+        if parent_commit_id:
+            self.repository.get_commit(parent_commit_id, project_id=project_id)
         commit_id = self.repository.reserve_commit_id()
 
         try:
@@ -35,13 +38,19 @@ class GenerationService:
             self.repository.store.atomic_write_bytes(image_path, image_bytes)
 
             image_rel_path = to_relative_path(image_path)
+            supabase_image_url = self.repository.upload_commit_image(
+                commit_id=commit_id,
+                filename="img_01.png",
+                payload=image_bytes,
+            )
             commit = self.repository.create_commit(
                 commit_id=commit_id,
                 project_id=project_id,
                 prompt=prompt,
                 model=model,
                 seed=seed,
-                image_paths=[image_rel_path],
+                parent_commit_id=parent_commit_id,
+                image_paths=[supabase_image_url or image_rel_path],
                 status="success",
                 error=None,
             )
@@ -53,6 +62,7 @@ class GenerationService:
                 prompt=prompt,
                 model=model,
                 seed=seed,
+                parent_commit_id=parent_commit_id,
                 image_paths=[],
                 status="failed",
                 error=f"{api_error.code.value}: {api_error.message}",
@@ -65,6 +75,7 @@ class GenerationService:
                 prompt=prompt,
                 model=model,
                 seed=seed,
+                parent_commit_id=parent_commit_id,
                 image_paths=[],
                 status="failed",
                 error=f"{ErrorCode.OPENAI_UPSTREAM_ERROR.value}: {exc}",
