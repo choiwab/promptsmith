@@ -4,7 +4,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { LoadingState } from "../../components/LoadingState";
 import { useEvalRun, useLastError, useProjectId, useRequestStates } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
-import type { CreateEvalRunRequest, ObjectivePreset } from "../../api/types";
+import type { CreateEvalRunRequest, EvalVariant, ObjectivePreset } from "../../api/types";
 
 interface EvalControlState {
   basePrompt: string;
@@ -52,11 +52,84 @@ const pipelineStepOrder: Record<PipelineStep, number> = {
   refining: 3
 };
 
+const WINNER_MIN_CONFIDENCE = 0.62;
+const WINNER_MIN_SCORE_MARGIN = 0.035;
+
 const humanizeStatus = (status: string): string =>
   status
     .split("_")
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : ""))
     .join(" ");
+
+interface BranchDecision {
+  parentCommitId?: string;
+  reason: string;
+  mode: "winner" | "anchor" | "new_anchor";
+  scoreMargin?: number;
+}
+
+const resolveWinnerBranchDecision = (
+  leaderboard: EvalVariant[],
+  anchorParentCommitId?: string
+): BranchDecision => {
+  const top = leaderboard[0];
+  const runnerUp = leaderboard[1];
+  if (!top) {
+    if (anchorParentCommitId) {
+      return {
+        parentCommitId: anchorParentCommitId,
+        mode: "anchor",
+        reason: "No winner yet. Staying on anchor for the next run."
+      };
+    }
+    return {
+      parentCommitId: undefined,
+      mode: "new_anchor",
+      reason: "No prior anchor available. The next run will create a fresh anchor."
+    };
+  }
+
+  if (!top.commit_id) {
+    if (anchorParentCommitId) {
+      return {
+        parentCommitId: anchorParentCommitId,
+        mode: "anchor",
+        reason: `${top.variant_id} has no persisted commit. Staying on anchor.`
+      };
+    }
+    return {
+      parentCommitId: undefined,
+      mode: "new_anchor",
+      reason: `${top.variant_id} has no persisted commit. A fresh anchor will be created.`
+    };
+  }
+
+  const scoreMargin = runnerUp ? top.composite_score - runnerUp.composite_score : top.composite_score;
+  if (top.confidence < WINNER_MIN_CONFIDENCE) {
+    return {
+      parentCommitId: anchorParentCommitId,
+      mode: anchorParentCommitId ? "anchor" : "new_anchor",
+      scoreMargin,
+      reason: `Winner confidence ${top.confidence.toFixed(2)} is below ${WINNER_MIN_CONFIDENCE.toFixed(2)}. Keeping anchor for stability.`
+    };
+  }
+
+  if (runnerUp && scoreMargin < WINNER_MIN_SCORE_MARGIN) {
+    return {
+      parentCommitId: anchorParentCommitId,
+      mode: anchorParentCommitId ? "anchor" : "new_anchor",
+      scoreMargin,
+      reason: `Top score gap ${scoreMargin.toFixed(3)} is below ${WINNER_MIN_SCORE_MARGIN.toFixed(3)}. Keeping anchor for stability.`
+    };
+  }
+
+  return {
+    parentCommitId: top.commit_id,
+    mode: "winner",
+    scoreMargin,
+    reason: `Winner ${top.variant_id} is stable (confidence ${top.confidence.toFixed(2)}, margin ${scoreMargin.toFixed(3)}).`
+  };
+};
 
 const readControls = (): EvalControlState => {
   if (typeof window === "undefined") {
@@ -105,15 +178,21 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
 
   const leaderboard = evalRun?.leaderboard ?? [];
   const topVariant = leaderboard[0];
+  const anchorParentCommitId = anchorCommitId || evalRun?.anchor_commit_id;
   const variants = useMemo(() => {
     const items = [...(evalRun?.variants ?? [])];
     items.sort((left, right) => left.variant_id.localeCompare(right.variant_id));
     return items;
   }, [evalRun?.variants]);
 
+  const winnerBranchDecision = useMemo(
+    () => resolveWinnerBranchDecision(leaderboard, anchorParentCommitId || undefined),
+    [anchorParentCommitId, leaderboard]
+  );
+
   const branchTargetCommitId = controls.followWinnerBranch
-    ? topVariant?.commit_id || evalRun?.anchor_commit_id || anchorCommitId
-    : anchorCommitId || evalRun?.anchor_commit_id;
+    ? winnerBranchDecision.parentCommitId
+    : anchorParentCommitId;
 
   const processNotes = useMemo(() => {
     const notes: string[] = [];
@@ -121,7 +200,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       notes.push(`Ready to run ${controls.variantCount} variants.`);
       notes.push(
         controls.followWinnerBranch
-          ? "Branch strategy is set to follow the latest winner or anchor automatically."
+          ? "Branch strategy is set to follow the winner only when it passes stability checks."
           : "Branch strategy is set to stay pinned to the selected anchor."
       );
       return notes;
@@ -136,6 +215,9 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     if (topVariant) {
       notes.push(`Current leader is ${topVariant.variant_id} at score ${topVariant.composite_score.toFixed(3)}.`);
     }
+    if (controls.followWinnerBranch) {
+      notes.push(`Branch gate: ${winnerBranchDecision.reason}`);
+    }
     if (evalRun.degraded) {
       notes.push("Fallback mode is active because at least one upstream generation or evaluation step failed.");
     }
@@ -146,7 +228,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       notes.push("Run finalized. You can branch from the winner and run again.");
     }
     return notes;
-  }, [controls.followWinnerBranch, controls.variantCount, evalRun, topVariant]);
+  }, [controls.followWinnerBranch, controls.variantCount, evalRun, topVariant, winnerBranchDecision.reason]);
 
   const progressPercent = useMemo(() => {
     if (!evalRun) {
@@ -263,8 +345,8 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     const useBranchParent = options?.useBranchParent ?? controls.followWinnerBranch;
     const lineageParentCommitId =
       useBranchParent
-        ? topVariant?.commit_id || evalRun?.anchor_commit_id || anchorCommitId || undefined
-        : anchorCommitId || evalRun?.anchor_commit_id || undefined;
+        ? winnerBranchDecision.parentCommitId || undefined
+        : anchorParentCommitId || undefined;
 
     const payload: CreateEvalRunRequest = {
       project_id: projectId,
@@ -387,12 +469,13 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
               onClick={() => setControls((prev) => ({ ...prev, followWinnerBranch: true }))}
               aria-pressed={controls.followWinnerBranch}
             >
-              Follow winner
+              Follow stable winner
             </button>
           </div>
           <p className="field-hint">
             Parent target: <strong>{branchTargetCommitId ?? "new anchor will be created"}</strong>
           </p>
+          {controls.followWinnerBranch ? <p className="field-hint">Decision: {winnerBranchDecision.reason}</p> : null}
         </div>
       </div>
 
