@@ -5,24 +5,30 @@ import { CompareDashboard } from "../features/compare-dashboard/CompareDashboard
 import { HistoryPanel } from "../features/history-panel/HistoryPanel";
 import { ToastHost } from "../features/notifications/ToastHost";
 import { PromptWorkbench } from "../features/prompt-workbench/PromptWorkbench";
-import { useHistory, useLastError, useProjectId, useRequestStates } from "../state/selectors";
+import { useHistory, useLastError, useProjectId, useProjects, useRequestStates } from "../state/selectors";
 import { useAppStore } from "../state/store";
 
 const appName = import.meta.env.VITE_APP_NAME || "Promptsmith";
 
 export const App = () => {
   const fetchHistory = useAppStore((state) => state.fetchHistory);
+  const refreshProjects = useAppStore((state) => state.refreshProjects);
   const setProject = useAppStore((state) => state.setProject);
   const retryLastOperation = useAppStore((state) => state.retryLastOperation);
   const history = useHistory();
   const projectId = useProjectId();
+  const projects = useProjects();
   const requestStates = useRequestStates();
   const lastError = useLastError();
   const [projectInput, setProjectInput] = useState(projectId);
+  const hasCurrentProjectOption = projects.some((project) => project.project_id === projectId);
 
   useEffect(() => {
-    void fetchHistory();
-  }, [fetchHistory]);
+    void (async () => {
+      await fetchHistory();
+      await refreshProjects();
+    })();
+  }, [fetchHistory, refreshProjects]);
 
   useEffect(() => {
     setProjectInput(projectId);
@@ -55,6 +61,39 @@ export const App = () => {
             <label htmlFor="project-id-input" className="app-header__project-label">
               Project ID
             </label>
+            <div className="app-header__project-row">
+              <select
+                id="project-select"
+                className="field app-header__project-input"
+                aria-label="Select project"
+                value={projectId}
+                disabled={requestStates.project === "loading" || projects.length === 0}
+                onChange={(event) => {
+                  const nextProjectId = event.target.value;
+                  if (nextProjectId === projectId) {
+                    return;
+                  }
+                  void setProject(nextProjectId);
+                }}
+              >
+                {projects.length === 0 ? <option value={projectId}>No projects yet</option> : null}
+                {projects.length > 0 && !hasCurrentProjectOption ? (
+                  <option value={projectId}>{projectId}</option>
+                ) : null}
+                {projects.map((project) => (
+                  <option key={project.project_id} value={project.project_id}>
+                    {project.name} ({project.project_id})
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="ghost"
+                onClick={() => void refreshProjects()}
+                disabled={requestStates.project === "loading"}
+              >
+                Refresh
+              </Button>
+            </div>
             <div className="app-header__project-row">
               <input
                 id="project-id-input"

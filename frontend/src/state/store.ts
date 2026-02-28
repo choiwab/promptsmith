@@ -6,6 +6,7 @@ import type {
   AsyncState,
   CompareResponse,
   HistoryItem,
+  Project,
   RequestError
 } from "../api/types";
 
@@ -29,6 +30,7 @@ interface RequestStates {
 
 interface AppState {
   projectId: string;
+  projects: Project[];
   model: string;
   history: HistoryItem[];
   nextCursor?: string;
@@ -43,6 +45,7 @@ interface AppState {
   dismissToast: (id: string) => void;
   pushToast: (kind: AppToast["kind"], message: string) => void;
   clearError: () => void;
+  refreshProjects: () => Promise<void>;
   setProject: (projectId: string, name?: string) => Promise<void>;
   fetchHistory: () => Promise<void>;
   generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
@@ -87,6 +90,7 @@ const pushToastState = (state: AppState, toast: AppToast): AppToast[] => {
 
 export const useAppStore = create<AppState>((set, get) => ({
   projectId: "default",
+  projects: [],
   model: "gpt-image-1",
   history: [],
   nextCursor: undefined,
@@ -117,6 +121,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearError: () => {
     set({ lastError: undefined });
+  },
+
+  refreshProjects: async () => {
+    try {
+      const response = await apiClient.listProjects();
+      set({ projects: response.items });
+    } catch {
+      // Keep project listing best-effort so the app remains usable even if listing fails.
+    }
   },
 
   setProject: async (projectId, name) => {
@@ -155,7 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         })
       }));
 
-      await get().fetchHistory();
+      await Promise.all([get().fetchHistory(), get().refreshProjects()]);
     } catch (error: unknown) {
       const parsed = toRequestError(error, "project");
       set((state) => ({

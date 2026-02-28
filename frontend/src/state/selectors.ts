@@ -1,8 +1,9 @@
-import type { AppToast, HistoryItem, RequestError } from "../api/types";
+import type { AppToast, HistoryItem, Project, RequestError } from "../api/types";
 import { useAppStore } from "./store";
 
 export const useHistory = (): HistoryItem[] => useAppStore((state) => state.history);
 export const useProjectId = (): string => useAppStore((state) => state.projectId);
+export const useProjects = (): Project[] => useAppStore((state) => state.projects);
 export const useBaselineCommitId = (): string | undefined => useAppStore((state) => state.activeBaselineCommitId);
 export const useSelectedCommitId = (): string | undefined => useAppStore((state) => state.selectedCommitId);
 export const useCompareResult = () => useAppStore((state) => state.latestCompareResult);
