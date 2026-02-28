@@ -52,6 +52,11 @@ SUPABASE_SCHEMA=public
 
 Run `backend/supabase/schema.sql` in Supabase SQL Editor before starting the backend.
 
+Demo seed behavior in Docker:
+- `SEED_DEMO_DATA=false` (default): backend starts without seeding.
+- `SEED_DEMO_DATA=true`: seed script runs, but skips automatically if project data already exists.
+- `SEED_DEMO_RESET=true` (only with `SEED_DEMO_DATA=true`): destructive reseed that clears Supabase demo tables and local `images/` + `artifacts/` first.
+
 ## Public Access
 - No login is required in this app.
 - Backend APIs are open, and the Supabase schema in `backend/supabase/schema.sql` is configured for anonymous full read/write/delete access.

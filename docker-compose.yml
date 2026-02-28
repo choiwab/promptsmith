@@ -6,7 +6,7 @@ services:
     container_name: promptsmith-backend
     working_dir: /workspace
     command: >
-      sh -c "if [ \"${SEED_DEMO_DATA:-true}\" = \"true\" ]; then
+      sh -c "if [ \"${SEED_DEMO_DATA:-false}\" = \"true\" ]; then
       python -m backend.scripts.seed_demo;
       fi &&
       uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000"
