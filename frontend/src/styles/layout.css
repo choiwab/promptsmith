@@ -1,3 +1,188 @@
+/* ── App shell: sidebar + content ── */
+.app-shell {
+  display: flex;
+  min-height: 100%;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  max-width: 260px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 200ms ease, min-width 200ms ease, max-width 200ms ease;
+}
+
+.sidebar--collapsed {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+}
+
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  gap: var(--space-2);
+}
+
+.sidebar__collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  transition: background-color 100ms ease;
+}
+
+.sidebar__collapse-btn:hover {
+  background: var(--bg-canvas);
+}
+
+/* Hide everything except the toggle when collapsed */
+.sidebar--collapsed .sidebar__title,
+.sidebar--collapsed .sidebar__list,
+.sidebar--collapsed .sidebar__footer,
+.sidebar--collapsed .sidebar__create-form,
+.sidebar--collapsed .sidebar__header .btn {
+  display: none;
+}
+
+.sidebar--collapsed .sidebar__header {
+  justify-content: center;
+  padding: var(--space-4) 0;
+}
+
+.sidebar__title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.sidebar__create-form {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sidebar__create-form input {
+  font-size: 0.82rem;
+}
+
+.sidebar__create-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sidebar__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.sidebar__list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar__item-btn {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--text);
+  border-left: 3px solid transparent;
+  transition: background-color 100ms ease;
+  font: inherit;
+}
+
+.sidebar__item-btn:hover {
+  background: var(--bg-canvas);
+}
+
+.sidebar__item--active .sidebar__item-btn {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.sidebar__item-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__item-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__item-date {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.sidebar__footer {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Mobile sidebar toggle ── */
+.app-header__menu-btn {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sidebar__backdrop {
+  display: none;
+}
+
+/* ── Header ── */
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -43,32 +228,8 @@
 .app-header__controls {
   display: flex;
   gap: var(--space-2);
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-
-.app-header__project-form {
-  display: grid;
-  gap: var(--space-1);
-  min-width: min(460px, 100%);
-}
-
-.app-header__project-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.app-header__project-row {
-  display: flex;
-  gap: var(--space-2);
   align-items: center;
-}
-
-.app-header__project-input {
-  min-width: 220px;
+  flex-wrap: wrap;
 }
 
 .app-header__chip {
@@ -140,12 +301,34 @@
     flex-direction: column;
   }
 
-  .app-header__project-form {
-    min-width: 100%;
+  .app-header__menu-btn {
+    display: block;
   }
 
-  .app-header__project-row {
-    flex-wrap: wrap;
+  .sidebar {
+    position: fixed;
+    z-index: 20;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  .sidebar__backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .sidebar__backdrop--visible {
+    display: block;
   }
 
   .app-layout {

@@ -10,13 +10,10 @@
     "build": "pnpm --dir frontend build",
     "lint:frontend": "pnpm --dir frontend lint",
     "test:frontend": "pnpm --dir frontend test",
-    "private": true,
-    "version": "0.1.0",
-    "scripts": {
-      "backend:setup": "python3 -m venv .venv && .venv/bin/python -m pip install -r backend/requirements.txt",
-      "dev:backend": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000",
-      "backend:seed": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m backend.scripts.seed_demo",
-      "backend:openapi": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m backend.scripts.export_openapi",
-      "lint:backend": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m ruff check backend && ([ -x .venv/bin/python ] && .venv/bin/python || python3) -m mypy backend/app"
-    }
+    "backend:setup": "python3 -m venv .venv && .venv/bin/python -m pip install -r backend/requirements.txt",
+    "dev:backend": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000",
+    "backend:seed": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m backend.scripts.seed_demo",
+    "backend:openapi": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m backend.scripts.export_openapi",
+    "lint:backend": "([ -x .venv/bin/python ] && .venv/bin/python || python3) -m ruff check backend && ([ -x .venv/bin/python ] && .venv/bin/python || python3) -m mypy backend/app"
   }
+}
