@@ -701,6 +701,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
             const chips = [...variant.strength_tags.slice(0, 2), ...variant.failure_tags.slice(0, 2)];
             const isExpanded = Boolean(expandedCardText[variant.variant_id]);
             const canExpand = variant.variant_prompt.length + variant.rationale.length > 360;
+            const isPromptSelected = controls.basePrompt.trim() === variant.variant_prompt.trim();
             return (
               <article
                 key={variant.variant_id}
@@ -749,6 +750,12 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
                       </button>
                     ) : null}
 
+                    <div className="eval-card__actions">
+                      <Button variant={isPromptSelected ? "primary" : "secondary"} onClick={() => applyPrompt(variant.variant_prompt)}>
+                        {isPromptSelected ? "Using this prompt" : "Use this prompt"}
+                      </Button>
+                    </div>
+
                     <div className="eval-card__chips">
                       {chips.length > 0
                         ? chips.map((chip) => (
@@ -768,12 +775,10 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
 
       {topVariant ? (
         <div className="eval-sticky-actions">
-          <Button variant="secondary" onClick={() => applyPrompt(topVariant.variant_prompt)}>
-            Use Winner as Next Prompt
-          </Button>
           <Button variant="primary" disabled={!canRun} onClick={() => void runEval()}>
             Run Next Round
           </Button>
+          <p className="eval-sticky-actions__hint">Tip: choose any card with “Use this prompt”, then run the next round.</p>
         </div>
       ) : null}
     </section>
