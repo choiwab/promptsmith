@@ -73,11 +73,9 @@
 }
 
 .btn--secondary {
-  background: linear-gradient(
-    180deg,
-    var(--bg-elevated) 0%,
-    var(--bg-canvas) 100%
-  );
+  background: linear-gradient(180deg,
+      var(--bg-elevated) 0%,
+      var(--bg-canvas) 100%);
   color: var(--text);
 }
 
@@ -288,10 +286,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background:
-    linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 /
-      34px 34px,
-    linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 / 34px
-      34px,
+    linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 / 34px 34px,
+    linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 / 34px 34px,
     var(--bg-canvas);
   cursor: grab;
 }
@@ -886,7 +882,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
-  background: var(--bg-canvas);
+  background: var(--bg-panel);
   display: grid;
   gap: var(--space-3);
 }
@@ -933,13 +929,13 @@
 }
 
 .eval-guide__step--active {
-  border-color: rgba(139, 92, 246, 0.4);
+  border-color: rgba(139, 92, 246, 0.3);
   background: var(--accent-soft);
 }
 
 .eval-next-action {
   margin-top: var(--space-3);
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   padding: var(--space-3);
@@ -1004,11 +1000,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background:
-    linear-gradient(
-      135deg,
+    linear-gradient(135deg,
       rgba(139, 92, 246, 0.06) 0%,
-      rgba(63, 185, 80, 0.03) 100%
-    ),
+      rgba(63, 185, 80, 0.03) 100%),
     var(--bg-canvas);
   padding: var(--space-3);
   display: grid;
@@ -1045,7 +1039,7 @@
 .eval-process__summary-pill {
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--bg-panel);
   font-size: 0.73rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1603,6 +1597,7 @@
 }
 
 @media (max-width: 1024px) {
+
   .preview-grid,
   .artifact-grid {
     grid-template-columns: 1fr;
