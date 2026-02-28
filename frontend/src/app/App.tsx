@@ -6,7 +6,6 @@ import { CompareDashboard } from "../features/compare-dashboard/CompareDashboard
 import { EvalWorkbench } from "../features/eval-workbench/EvalWorkbench";
 import { HistoryPanel } from "../features/history-panel/HistoryPanel";
 import { LineageWorkspace } from "../features/history-panel/LineageWorkspace";
-import { ToastHost } from "../features/notifications/ToastHost";
 import { ProjectSidebar } from "../features/project-sidebar/ProjectSidebar";
 import { PromptWorkbench } from "../features/prompt-workbench/PromptWorkbench";
 import {
@@ -317,8 +316,6 @@ export const App = () => {
         >
           <LineageWorkspace fullscreen />
         </Modal>
-
-        <ToastHost />
       </div>
     </div>
   );
