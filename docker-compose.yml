@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: promptsmith-backend
+    working_dir: /workspace
+    command: >
+      sh -c "if [ \"${SEED_DEMO_DATA:-true}\" = \"true\" ]; then
+      python -m backend.scripts.seed_demo;
+      fi &&
+      uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4.1-mini}
+      APP_DATA_DIR: /workspace/data
+      APP_IMAGE_DIR: /workspace/images
+      APP_ARTIFACT_DIR: /workspace/artifacts
+      APP_COMPARE_THRESHOLD: ${APP_COMPARE_THRESHOLD:-0.30}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./:/workspace
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: promptsmith-frontend
+    working_dir: /workspace/frontend
+    command: sh -c "pnpm install && pnpm dev --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8000}
+      VITE_APP_NAME: ${VITE_APP_NAME:-Promptsmith}
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/workspace/frontend
+      - frontend_node_modules:/workspace/frontend/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  frontend_node_modules:

@@ -6,6 +6,8 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from backend.app.api.routes_baseline import router as baseline_router
@@ -28,6 +30,7 @@ logger = logging.getLogger("promptsmith.backend")
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    settings.ensure_directories()
     repository = Repository(settings)
 
     generation_service = GenerationService(settings=settings, repository=repository)
@@ -40,6 +43,13 @@ def create_app() -> FastAPI:
     )
 
     app = FastAPI(title="Promptsmith Backend", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.state.settings = settings
     app.state.repository = repository
@@ -121,6 +131,9 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.mount("/images", StaticFiles(directory=str(settings.app_image_dir)), name="images")
+    app.mount("/artifacts", StaticFiles(directory=str(settings.app_artifact_dir)), name="artifacts")
 
     app.include_router(generate_router)
     app.include_router(baseline_router)

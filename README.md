@@ -2,6 +2,25 @@
 
 Track B frontend implementation for Promptsmith.
 
+## Run With Docker (One Command)
+1. Copy Docker env template:
+```bash
+cp .env.docker.example .env
+```
+2. (Optional) Set `OPENAI_API_KEY` in `.env` if you want `/generate` to call OpenAI.
+3. Start everything:
+```bash
+docker compose up --build
+```
+If port `8000` is already in use:
+```bash
+BACKEND_PORT=8001 docker compose up --build
+```
+
+App URLs:
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:${BACKEND_PORT:-8000}`
+
 ## Requirements
 - Node.js 20+
 - pnpm 9+
