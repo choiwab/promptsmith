@@ -10,6 +10,7 @@ interface EvalControlState {
   basePrompt: string;
   objectivePreset: ObjectivePreset;
   variantCount: 2 | 3;
+  followWinnerBranch: boolean;
 }
 
 const STORAGE_KEY = "promptsmith.eval.controls.v1";
@@ -19,7 +20,8 @@ const DEFAULT_QUALITY = "medium" as const;
 const defaultControls: EvalControlState = {
   basePrompt: "",
   objectivePreset: "adherence",
-  variantCount: 3
+  variantCount: 3,
+  followWinnerBranch: true
 };
 
 const stageMessages: Record<string, string> = {
@@ -32,6 +34,29 @@ const stageMessages: Record<string, string> = {
   completed_degraded: "Eval completed in degraded mode.",
   failed: "Eval failed."
 };
+
+const pipelineSteps = ["planning", "generating", "evaluating", "refining"] as const;
+type PipelineStep = (typeof pipelineSteps)[number];
+
+const pipelineStepLabel: Record<PipelineStep, string> = {
+  planning: "Plan variants",
+  generating: "Generate images",
+  evaluating: "Score and judge",
+  refining: "Draft next prompts"
+};
+
+const pipelineStepOrder: Record<PipelineStep, number> = {
+  planning: 0,
+  generating: 1,
+  evaluating: 2,
+  refining: 3
+};
+
+const humanizeStatus = (status: string): string =>
+  status
+    .split("_")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : ""))
+    .join(" ");
 
 const readControls = (): EvalControlState => {
   if (typeof window === "undefined") {
@@ -48,6 +73,7 @@ const readControls = (): EvalControlState => {
       ...defaultControls,
       ...parsed,
       variantCount: parsed.variantCount === 2 || parsed.variantCount === 3 ? parsed.variantCount : 3,
+      followWinnerBranch: typeof parsed.followWinnerBranch === "boolean" ? parsed.followWinnerBranch : true,
       objectivePreset: parsed.objectivePreset === "aesthetic" || parsed.objectivePreset === "product" ? parsed.objectivePreset : "adherence"
     };
   } catch {
@@ -71,6 +97,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
 
   const [controls, setControls] = useState<EvalControlState>(() => readControls());
   const [focusedCard, setFocusedCard] = useState(0);
+  const [expandedCardText, setExpandedCardText] = useState<Record<string, boolean>>({});
 
   const canRun = useMemo(() => {
     return controls.basePrompt.trim().length >= 5 && requestStates.eval !== "loading";
@@ -79,6 +106,48 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const suggestions = evalRun?.suggestions;
   const leaderboard = evalRun?.leaderboard ?? [];
   const topVariant = leaderboard[0];
+  const variants = useMemo(() => {
+    const items = [...(evalRun?.variants ?? [])];
+    items.sort((left, right) => left.variant_id.localeCompare(right.variant_id));
+    return items;
+  }, [evalRun?.variants]);
+
+  const branchTargetCommitId = controls.followWinnerBranch
+    ? topVariant?.commit_id || evalRun?.anchor_commit_id || anchorCommitId
+    : anchorCommitId || evalRun?.anchor_commit_id;
+
+  const processNotes = useMemo(() => {
+    const notes: string[] = [];
+    if (!evalRun) {
+      notes.push(`Ready to run ${controls.variantCount} variants.`);
+      notes.push(
+        controls.followWinnerBranch
+          ? "Branch strategy is set to follow the latest winner or anchor automatically."
+          : "Branch strategy is set to stay pinned to the selected anchor."
+      );
+      return notes;
+    }
+
+    notes.push(
+      `Progress: generated ${evalRun.progress.generated_variants}/${evalRun.progress.total_variants}, evaluated ${evalRun.progress.evaluated_variants}/${evalRun.progress.total_variants}.`
+    );
+    if (evalRun.variants.length > 0) {
+      notes.push(`Planner produced ${evalRun.variants.length} variants for objective ${evalRun.objective_preset}.`);
+    }
+    if (topVariant) {
+      notes.push(`Current leader is ${topVariant.variant_id} at score ${topVariant.composite_score.toFixed(3)}.`);
+    }
+    if (evalRun.degraded) {
+      notes.push("Fallback mode is active because at least one upstream generation or evaluation step failed.");
+    }
+    if (evalRun.stage === "refining") {
+      notes.push("Agent is synthesizing conservative, balanced, and aggressive next prompts.");
+    }
+    if (evalRun.stage === "completed" || evalRun.stage === "completed_degraded") {
+      notes.push("Run finalized. You can branch from the winner or apply a suggestion directly.");
+    }
+    return notes;
+  }, [controls.followWinnerBranch, controls.variantCount, evalRun, topVariant]);
 
   const progressPercent = useMemo(() => {
     if (!evalRun) {
@@ -104,6 +173,73 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     return 3;
   }, [evalRun]);
 
+  const stepStateById = useMemo(() => {
+    const stepState: Record<PipelineStep, "pending" | "active" | "done"> = {
+      planning: "pending",
+      generating: "pending",
+      evaluating: "pending",
+      refining: "pending"
+    };
+
+    if (!evalRun) {
+      return stepState;
+    }
+
+    const stage = evalRun.stage;
+    if (stage === "completed" || stage === "completed_degraded") {
+      for (const step of pipelineSteps) {
+        stepState[step] = "done";
+      }
+      return stepState;
+    }
+
+    if (stage === "failed") {
+      if (evalRun.variants.length > 0) {
+        stepState.planning = "done";
+      } else {
+        stepState.planning = "active";
+        return stepState;
+      }
+
+      if (evalRun.progress.generated_variants > 0) {
+        stepState.generating = "done";
+      } else {
+        stepState.generating = "active";
+        return stepState;
+      }
+
+      if (evalRun.progress.evaluated_variants > 0) {
+        stepState.evaluating = "done";
+      } else {
+        stepState.evaluating = "active";
+        return stepState;
+      }
+
+      stepState.refining = suggestions?.balanced?.prompt_text ? "done" : "active";
+      return stepState;
+    }
+
+    if (stage === "queued") {
+      stepState.planning = "active";
+      return stepState;
+    }
+
+    const activeOrder = pipelineStepOrder[stage as PipelineStep];
+    if (activeOrder === undefined) {
+      return stepState;
+    }
+
+    for (const step of pipelineSteps) {
+      const order = pipelineStepOrder[step];
+      if (order < activeOrder) {
+        stepState[step] = "done";
+      } else if (order === activeOrder) {
+        stepState[step] = "active";
+      }
+    }
+    return stepState;
+  }, [evalRun, suggestions?.balanced?.prompt_text]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -125,10 +261,11 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       return;
     }
 
+    const useBranchParent = options?.useBranchParent ?? controls.followWinnerBranch;
     const lineageParentCommitId =
-      options?.useBranchParent
+      useBranchParent
         ? topVariant?.commit_id || evalRun?.anchor_commit_id || anchorCommitId || undefined
-        : anchorCommitId || undefined;
+        : anchorCommitId || evalRun?.anchor_commit_id || undefined;
 
     const payload: CreateEvalRunRequest = {
       project_id: projectId,
@@ -157,7 +294,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         if (canRun) {
           event.preventDefault();
-          void runEval({ useBranchParent: false });
+          void runEval();
         }
         return;
       }
@@ -242,6 +379,31 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
             ))}
           </div>
         </div>
+
+        <div className="eval-segment">
+          <span className="eval-segment__label">Branching</span>
+          <div className="eval-segment__actions">
+            <button
+              type="button"
+              className={`eval-chip-btn${!controls.followWinnerBranch ? " eval-chip-btn--active" : ""}`}
+              onClick={() => setControls((prev) => ({ ...prev, followWinnerBranch: false }))}
+              aria-pressed={!controls.followWinnerBranch}
+            >
+              Stay on anchor
+            </button>
+            <button
+              type="button"
+              className={`eval-chip-btn${controls.followWinnerBranch ? " eval-chip-btn--active" : ""}`}
+              onClick={() => setControls((prev) => ({ ...prev, followWinnerBranch: true }))}
+              aria-pressed={controls.followWinnerBranch}
+            >
+              Follow winner
+            </button>
+          </div>
+          <p className="field-hint">
+            Parent target: <strong>{branchTargetCommitId ?? "new anchor will be created"}</strong>
+          </p>
+        </div>
       </div>
 
       <div className="panel__actions">
@@ -249,7 +411,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
           variant="primary"
           loading={requestStates.eval === "loading"}
           disabled={!canRun}
-          onClick={() => void runEval({ useBranchParent: false })}
+          onClick={() => void runEval()}
         >
           Run Eval
         </Button>
@@ -290,11 +452,68 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         </section>
       ) : null}
 
+      <section className="eval-process" aria-live="polite">
+        <header className="eval-process__header">
+          <h3>Agent Process</h3>
+          <p>Live pipeline states and decisions derived from run telemetry.</p>
+        </header>
+
+        <ol className="eval-timeline">
+          {pipelineSteps.map((step) => (
+            <li key={step} className={`eval-timeline__step eval-timeline__step--${stepStateById[step]}`}>
+              <span className="eval-timeline__dot" />
+              <div>
+                <strong>{pipelineStepLabel[step]}</strong>
+                <p>{stepStateById[step] === "active" ? "In progress" : stepStateById[step] === "done" ? "Completed" : "Pending"}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <ul className="eval-trace">
+          {processNotes.map((note, index) => (
+            <li key={`${index}-${note}`}>{note}</li>
+          ))}
+        </ul>
+
+        {variants.length > 0 ? (
+          <div className="eval-variant-trace">
+            {variants.map((variant) => (
+              <article key={`trace-${variant.variant_id}`} className="eval-variant-trace__item">
+                <div className="eval-variant-trace__meta">
+                  <strong>{variant.variant_id}</strong>
+                  <span
+                    className={`eval-trace-pill eval-trace-pill--${
+                      variant.status.includes("failed") || variant.status.includes("degraded") || variant.status.includes("skipped")
+                        ? "warn"
+                        : "neutral"
+                    }`}
+                  >
+                    {humanizeStatus(variant.status)}
+                  </span>
+                  {variant.rank ? <span className="eval-trace-pill eval-trace-pill--good">rank #{variant.rank}</span> : null}
+                </div>
+                <p className="eval-variant-trace__line">
+                  {variant.mutation_tags.length > 0 ? variant.mutation_tags.slice(0, 3).join(" • ") : "Mutation tags pending"}
+                </p>
+                <p className="eval-variant-trace__line">
+                  gen {variant.generation_latency_ms ?? "--"}ms | judge {variant.judge_latency_ms ?? "--"}ms | score{" "}
+                  {variant.composite_score.toFixed(3)}
+                </p>
+                {variant.error ? <p className="eval-variant-trace__error">{variant.error}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
       {leaderboard.length > 0 ? (
         <section className="eval-leaderboard">
           {leaderboard.map((variant, index) => {
             const imageUrl = resolveAssetUrl(variant.image_url || undefined);
             const chips = [...variant.strength_tags.slice(0, 2), ...variant.failure_tags.slice(0, 2)];
+            const isExpanded = Boolean(expandedCardText[variant.variant_id]);
+            const canExpand = variant.variant_prompt.length + variant.rationale.length > 360;
             return (
               <article
                 key={variant.variant_id}
@@ -312,23 +531,47 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
                   <span className="eval-card__confidence">confidence {variant.confidence.toFixed(2)}</span>
                 </header>
 
-                {imageUrl ? (
-                  <img className="eval-card__image" src={imageUrl} alt={`Variant ${variant.variant_id}`} loading="lazy" />
-                ) : (
-                  <div className="eval-card__placeholder">Image unavailable</div>
-                )}
+                <div className="eval-card__body">
+                  <div className="eval-card__media">
+                    {imageUrl ? (
+                      <img className="eval-card__image" src={imageUrl} alt={`Variant ${variant.variant_id}`} loading="lazy" />
+                    ) : (
+                      <div className="eval-card__placeholder">Image unavailable</div>
+                    )}
+                  </div>
 
-                <p className="eval-card__prompt">{variant.variant_prompt}</p>
-                <p className="eval-card__rationale">{variant.rationale}</p>
+                  <div className="eval-card__content">
+                    <div
+                      className={`eval-card__text-wrap${
+                        canExpand ? " eval-card__text-wrap--clamped" : ""
+                      }${isExpanded ? " eval-card__text-wrap--expanded" : ""}`}
+                    >
+                      <p className="eval-card__prompt">{variant.variant_prompt}</p>
+                      <p className="eval-card__rationale">{variant.rationale}</p>
+                    </div>
 
-                <div className="eval-card__chips">
-                  {chips.length > 0
-                    ? chips.map((chip) => (
-                        <span key={`${variant.variant_id}-${chip}`} className="eval-chip">
-                          {chip}
-                        </span>
-                      ))
-                    : null}
+                    {canExpand ? (
+                      <button
+                        type="button"
+                        className="eval-card__toggle"
+                        onClick={() =>
+                          setExpandedCardText((prev) => ({ ...prev, [variant.variant_id]: !Boolean(prev[variant.variant_id]) }))
+                        }
+                      >
+                        {isExpanded ? "Show less" : "Show more"}
+                      </button>
+                    ) : null}
+
+                    <div className="eval-card__chips">
+                      {chips.length > 0
+                        ? chips.map((chip) => (
+                            <span key={`${variant.variant_id}-${chip}`} className="eval-chip">
+                              {chip}
+                            </span>
+                          ))
+                        : null}
+                    </div>
+                  </div>
                 </div>
               </article>
             );
