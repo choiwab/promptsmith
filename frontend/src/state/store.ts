@@ -12,15 +12,16 @@ import type {
   RequestError
 } from "../api/types";
 
-type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" | "eval";
+type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" | "eval" | "delete";
 
 type LastOperation =
   | { kind: "project"; projectId: string; name?: string }
   | { kind: "history" }
   | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string }
   | { kind: "baseline"; commitId: string }
-  | { kind: "compare"; commitId: string }
+  | { kind: "compare"; commitId: string; baselineCommitId?: string }
   | { kind: "eval"; payload: CreateEvalRunRequest }
+  | { kind: "delete"; commitId: string }
   | null;
 
 interface RequestStates {
@@ -30,6 +31,7 @@ interface RequestStates {
   baseline: AsyncState;
   compare: AsyncState;
   eval: AsyncState;
+  delete: AsyncState;
 }
 
 interface AppState {
@@ -46,6 +48,14 @@ interface AppState {
   lastError?: RequestError;
   lastOperation: LastOperation;
   toasts: AppToast[];
+  promptModalAnchorCommitId?: string;
+  evalModalAnchorCommitId?: string;
+  compareModalOpen: boolean;
+  commitInfoCommitId?: string;
+  graphFullscreenOpen: boolean;
+  compareSelectionMode: boolean;
+  compareSelectionCommitIds: string[];
+  deleteTargetCommitId?: string;
   setSelectedCommit: (commitId?: string) => void;
   dismissToast: (id: string) => void;
   pushToast: (kind: AppToast["kind"], message: string) => void;
@@ -55,7 +65,21 @@ interface AppState {
   fetchHistory: () => Promise<void>;
   generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
   setBaseline: (commitId: string) => Promise<void>;
-  compareCommit: (commitId: string) => Promise<void>;
+  compareCommit: (commitId: string, baselineCommitId?: string) => Promise<void>;
+  selectCompareNode: (commitId: string) => Promise<void>;
+  toggleCompareSelectionMode: (enabled?: boolean) => void;
+  deleteCommitSubtree: (commitId: string) => Promise<void>;
+  requestDeleteCommit: (commitId?: string) => void;
+  clearDeleteCommitRequest: () => void;
+  openPromptModal: (anchorCommitId?: string) => void;
+  closePromptModal: () => void;
+  openEvalModal: (anchorCommitId?: string) => void;
+  closeEvalModal: () => void;
+  openCompareModal: () => void;
+  closeCompareModal: () => void;
+  openCommitInfoModal: (commitId: string) => void;
+  closeCommitInfoModal: () => void;
+  setGraphFullscreenOpen: (open: boolean) => void;
   runEvalPipeline: (payload: CreateEvalRunRequest) => Promise<void>;
   retryLastOperation: () => Promise<void>;
   resolveAssetUrl: (path?: string) => string | undefined;
@@ -67,7 +91,8 @@ const initialRequestStates: RequestStates = {
   generate: "idle",
   baseline: "idle",
   compare: "idle",
-  eval: "idle"
+  eval: "idle",
+  delete: "idle"
 };
 
 const toRequestError = (error: unknown, operation: OperationKey): RequestError => {
@@ -111,6 +136,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastError: undefined,
   lastOperation: null,
   toasts: [],
+  promptModalAnchorCommitId: undefined,
+  evalModalAnchorCommitId: undefined,
+  compareModalOpen: false,
+  commitInfoCommitId: undefined,
+  graphFullscreenOpen: false,
+  compareSelectionMode: false,
+  compareSelectionCommitIds: [],
+  deleteTargetCommitId: undefined,
 
   setSelectedCommit: (commitId) => {
     set({ selectedCommitId: commitId });
@@ -210,11 +243,16 @@ export const useAppStore = create<AppState>((set, get) => ({
             ? state.selectedCommitId
             : response.items[0]?.commit_id;
 
+        const compareSelectionCommitIds = state.compareSelectionCommitIds.filter((id) =>
+          response.items.some((item) => item.commit_id === id)
+        );
+
         return {
           history: response.items,
           nextCursor: response.next_cursor,
           activeBaselineCommitId: response.active_baseline_commit_id ?? state.activeBaselineCommitId,
           selectedCommitId,
+          compareSelectionCommitIds,
           requestStates: setRequestState(state, "history", "success")
         };
       });
@@ -279,7 +317,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           created_at: response.created_at,
           prompt: response.prompt || prompt,
           parent_commit_id: response.parent_commit_id,
-          image_paths: response.image_paths
+          image_paths: response.image_paths,
+          model: state.model,
+          seed
         };
 
         const existing = state.history.find((item) => item.commit_id === response.commit_id);
@@ -394,10 +434,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  compareCommit: async (commitId) => {
-    const baselineId = get().activeBaselineCommitId;
+  compareCommit: async (commitId, baselineCommitId) => {
+    const fallbackBaselineId = get().activeBaselineCommitId;
+    const resolvedBaselineId = baselineCommitId ?? fallbackBaselineId;
 
-    if (!baselineId) {
+    if (!resolvedBaselineId) {
       const error: RequestError = {
         code: "BASELINE_NOT_SET",
         message: "Set a baseline commit to run regression checks.",
@@ -408,7 +449,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set((state) => ({
         lastError: error,
-        requestStates: setRequestState(state, "compare", "error")
+        requestStates: setRequestState(state, "compare", "error"),
+        compareModalOpen: true
       }));
       return;
     }
@@ -417,26 +459,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       requestStates: setRequestState(state, "compare", "loading"),
       selectedCommitId: commitId,
       lastError: undefined,
-      lastOperation: { kind: "compare", commitId }
+      lastOperation: { kind: "compare", commitId, baselineCommitId: resolvedBaselineId },
+      compareModalOpen: true,
+      latestCompareResult: undefined,
+      compareSelectionMode: false
     }));
 
     try {
       const response = normalizeCompareResponse(
         await apiClient.compare({
           project_id: get().projectId,
-          candidate_commit_id: commitId
+          candidate_commit_id: commitId,
+          baseline_commit_id: resolvedBaselineId
         })
       );
 
       set((state) => ({
         latestCompareResult: response,
-        requestStates: setRequestState(state, "compare", "success")
+        requestStates: setRequestState(state, "compare", "success"),
+        compareSelectionCommitIds: []
       }));
     } catch (error: unknown) {
       const parsed = toRequestError(error, "compare");
       set((state) => ({
         requestStates: setRequestState(state, "compare", "error"),
         lastError: parsed,
+        compareSelectionCommitIds: [],
         toasts: pushToastState(state, {
           id: `${Date.now()}-compare-error`,
           kind: "error",
@@ -444,6 +492,148 @@ export const useAppStore = create<AppState>((set, get) => ({
         })
       }));
     }
+  },
+
+  toggleCompareSelectionMode: (enabled) => {
+    set((state) => {
+      const next = typeof enabled === "boolean" ? enabled : !state.compareSelectionMode;
+      return {
+        compareSelectionMode: next,
+        compareSelectionCommitIds: next ? state.compareSelectionCommitIds : []
+      };
+    });
+  },
+
+  selectCompareNode: async (commitId) => {
+    const state = get();
+    if (!state.compareSelectionMode) {
+      return;
+    }
+
+    if (state.compareSelectionCommitIds.includes(commitId)) {
+      return;
+    }
+
+    if (state.compareSelectionCommitIds.length === 0) {
+      set({ compareSelectionCommitIds: [commitId], selectedCommitId: commitId });
+      return;
+    }
+
+    const baselineCommitId = state.compareSelectionCommitIds[0];
+    set({
+      compareSelectionCommitIds: [baselineCommitId, commitId],
+      compareSelectionMode: false,
+      selectedCommitId: commitId
+    });
+    await get().compareCommit(commitId, baselineCommitId);
+    set({ compareSelectionCommitIds: [] });
+  },
+
+  requestDeleteCommit: (commitId) => {
+    set({ deleteTargetCommitId: commitId });
+  },
+
+  clearDeleteCommitRequest: () => {
+    set({ deleteTargetCommitId: undefined });
+  },
+
+  deleteCommitSubtree: async (commitId) => {
+    set((state) => ({
+      requestStates: setRequestState(state, "delete", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "delete", commitId }
+    }));
+
+    try {
+      const response = await apiClient.deleteCommit(get().projectId, commitId);
+      const deletedIds = new Set(response.deleted_commit_ids);
+
+      set((state) => {
+        const history = state.history.filter((item) => !deletedIds.has(item.commit_id));
+        const selectedCommitId = state.selectedCommitId && deletedIds.has(state.selectedCommitId)
+          ? history[0]?.commit_id
+          : state.selectedCommitId;
+        const latestCompareResult =
+          state.latestCompareResult &&
+          (deletedIds.has(state.latestCompareResult.baseline_commit_id) ||
+            deletedIds.has(state.latestCompareResult.candidate_commit_id))
+            ? undefined
+            : state.latestCompareResult;
+
+        return {
+          history,
+          selectedCommitId,
+          latestCompareResult,
+          activeBaselineCommitId: response.active_baseline_commit_id,
+          deleteTargetCommitId: undefined,
+          requestStates: setRequestState(state, "delete", "success"),
+          commitInfoCommitId: state.commitInfoCommitId && deletedIds.has(state.commitInfoCommitId) ? undefined : state.commitInfoCommitId,
+          toasts: pushToastState(state, {
+            id: `${Date.now()}-delete-success`,
+            kind: "success",
+            message: `Deleted ${response.deleted_commit_ids.length} commit(s).`
+          })
+        };
+      });
+
+      await get().fetchHistory();
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "delete");
+      set((state) => ({
+        requestStates: setRequestState(state, "delete", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-delete-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
+  openPromptModal: (anchorCommitId) => {
+    set({
+      promptModalAnchorCommitId: anchorCommitId,
+      selectedCommitId: anchorCommitId ?? get().selectedCommitId
+    });
+  },
+
+  closePromptModal: () => {
+    set({ promptModalAnchorCommitId: undefined });
+  },
+
+  openEvalModal: (anchorCommitId) => {
+    set({
+      evalModalAnchorCommitId: anchorCommitId,
+      selectedCommitId: anchorCommitId ?? get().selectedCommitId
+    });
+  },
+
+  closeEvalModal: () => {
+    set({ evalModalAnchorCommitId: undefined });
+  },
+
+  openCompareModal: () => {
+    set({ compareModalOpen: true });
+  },
+
+  closeCompareModal: () => {
+    set({ compareModalOpen: false });
+  },
+
+  openCommitInfoModal: (commitId) => {
+    set({
+      commitInfoCommitId: commitId,
+      selectedCommitId: commitId
+    });
+  },
+
+  closeCommitInfoModal: () => {
+    set({ commitInfoCommitId: undefined });
+  },
+
+  setGraphFullscreenOpen: (open) => {
+    set({ graphFullscreenOpen: open });
   },
 
   runEvalPipeline: async (payload) => {
@@ -567,7 +757,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    await get().compareCommit(op.commitId);
+    if (op.kind === "delete") {
+      await get().deleteCommitSubtree(op.commitId);
+      return;
+    }
+
+    await get().compareCommit(op.commitId, op.baselineCommitId);
   },
 
   resolveAssetUrl: (path) => {

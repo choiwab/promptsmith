@@ -13,7 +13,10 @@ class HistoryItem(BaseModel):
     prompt: str
     parent_commit_id: str | None = None
     image_paths: list[str] = Field(default_factory=list)
+    model: str
+    seed: str | None = None
     status: str
+    error: str | None = None
     created_at: str
 
 
@@ -44,7 +47,10 @@ async def history(
                 prompt=commit.prompt,
                 parent_commit_id=commit.parent_commit_id,
                 image_paths=commit.image_paths,
+                model=commit.model,
+                seed=commit.seed,
                 status=commit.status,
+                error=commit.error,
                 created_at=commit.created_at,
             )
             for commit in commits

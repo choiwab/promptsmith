@@ -250,6 +250,10 @@
   align-items: start;
 }
 
+.app-layout--dashboard {
+  grid-template-columns: minmax(290px, 0.95fr) minmax(780px, 2.4fr);
+}
+
 .app-column {
   display: grid;
   gap: var(--space-4);
@@ -263,6 +267,17 @@
   box-shadow: var(--shadow-sm);
   padding: var(--space-5);
   min-height: 280px;
+}
+
+.panel--lineage {
+  min-height: 72vh;
+}
+
+.panel--lineage-fullscreen {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
 }
 
 .panel__header {

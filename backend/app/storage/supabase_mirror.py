@@ -99,6 +99,32 @@ class SupabaseMirror:
     def insert_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._insert("comparisons", payload)
 
+    def list_comparisons(self, project_id: str) -> list[dict[str, Any]]:
+        return self._select(
+            "comparisons",
+            params={
+                "select": "*",
+                "project_id": f"eq.{project_id}",
+                "limit": "10000",
+            },
+        )
+
+    def delete_commits(self, commit_ids: list[str]) -> list[dict[str, Any]]:
+        if not commit_ids:
+            return []
+        return self._delete_rows(
+            "commits",
+            filters={"commit_id": f"in.({','.join(commit_ids)})"},
+        )
+
+    def delete_comparisons(self, report_ids: list[str]) -> list[dict[str, Any]]:
+        if not report_ids:
+            return []
+        return self._delete_rows(
+            "comparisons",
+            filters={"report_id": f"in.({','.join(report_ids)})"},
+        )
+
     def delete_all_records(self, base_table: str, id_column: str) -> None:
         table = self.table_name(base_table)
         url = f"{self.config.url}/rest/v1/{table}"
@@ -116,6 +142,19 @@ class SupabaseMirror:
         response = self._client.delete(url, headers=headers, params=params)
         if response.status_code >= 400:
             raise RuntimeError(self._format_error(f"delete all rows from {base_table}", response))
+
+    def delete_storage_object(self, object_path: str) -> bool:
+        object_path = object_path.strip("/")
+        if not object_path:
+            return False
+
+        url = f"{self.config.url}/storage/v1/object/{self.config.bucket}/{object_path}"
+        headers = {
+            "apikey": self.config.service_role_key,
+            "Authorization": f"Bearer {self.config.service_role_key}",
+        }
+        response = self._client.delete(url, headers=headers)
+        return response.status_code < 400
 
     def upload_commit_image(self, *, commit_id: str, filename: str, payload: bytes, content_type: str = "image/png") -> str:
         object_path = f"commits/{commit_id}/{filename}"
@@ -215,6 +254,26 @@ class SupabaseMirror:
         response = self._client.patch(url, headers=headers, params=filters, json=payload)
         if response.status_code >= 400:
             raise RuntimeError(self._format_error(f"update {base_table}", response))
+
+        data = response.json()
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
+
+    def _delete_rows(self, base_table: str, *, filters: dict[str, str]) -> list[dict[str, Any]]:
+        table = self.table_name(base_table)
+        url = f"{self.config.url}/rest/v1/{table}"
+        headers = {
+            "apikey": self.config.service_role_key,
+            "Authorization": f"Bearer {self.config.service_role_key}",
+            "Accept": "application/json",
+            "Accept-Profile": self.config.schema,
+            "Content-Profile": self.config.schema,
+            "Prefer": "return=representation",
+        }
+        response = self._client.delete(url, headers=headers, params=filters)
+        if response.status_code >= 400:
+            raise RuntimeError(self._format_error(f"delete from {base_table}", response))
 
         data = response.json()
         if isinstance(data, list):

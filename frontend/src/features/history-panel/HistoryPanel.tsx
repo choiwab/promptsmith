@@ -1,8 +1,6 @@
 import { Badge } from "../../components/Badge";
-import { Button } from "../../components/Button";
-import { useBaselineCommitId, useHistory, useRequestStates, useSelectedCommitId } from "../../state/selectors";
+import { useBaselineCommitId, useHistory, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
-import { LineageGraph } from "./LineageGraph";
 
 const formatDate = (value: string): string => {
   const date = new Date(value);
@@ -20,18 +18,14 @@ export const HistoryPanel = () => {
   const history = useHistory();
   const baselineId = useBaselineCommitId();
   const selectedCommitId = useSelectedCommitId();
-  const requestStates = useRequestStates();
-  const setBaseline = useAppStore((state) => state.setBaseline);
-  const compareCommit = useAppStore((state) => state.compareCommit);
   const setSelectedCommit = useAppStore((state) => state.setSelectedCommit);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
-  const selectedCommit = history.find((item) => item.commit_id === selectedCommitId);
 
   return (
     <section className="panel panel--history">
       <header className="panel__header">
         <h2>Commit History</h2>
-        <p>Newest commits first. Set one active baseline.</p>
+        <p>Newest commits first. Select one to inspect lineage details.</p>
       </header>
 
       {history.length === 0 ? <div className="state">No commits yet. Generate your first commit.</div> : null}
@@ -64,46 +58,10 @@ export const HistoryPanel = () => {
               ) : (
                 <div className="history-item__thumb history-item__thumb--placeholder">No image preview</div>
               )}
-
-              <div className="history-item__actions">
-                <Button
-                  variant="secondary"
-                  loading={requestStates.baseline === "loading" && !isBaseline}
-                  disabled={requestStates.baseline === "loading" || isBaseline}
-                  onClick={() => setBaseline(item.commit_id)}
-                >
-                  Set Baseline
-                </Button>
-                <Button
-                  variant="ghost"
-                  loading={requestStates.compare === "loading" && selectedCommitId === item.commit_id}
-                  disabled={!baselineId || isBaseline || requestStates.compare === "loading"}
-                  onClick={() => compareCommit(item.commit_id)}
-                >
-                  Compare
-                </Button>
-              </div>
             </li>
           );
         })}
       </ul>
-
-      <section className="lineage-section">
-        <header className="lineage-section__header">
-          <h3>Lineage Graph</h3>
-          <p>
-            {selectedCommit
-              ? `Selected ${selectedCommit.commit_id}${selectedCommit.parent_commit_id ? ` from ${selectedCommit.parent_commit_id}` : " (root)"}`
-              : "Select a commit to inspect lineage."}
-          </p>
-        </header>
-        <LineageGraph
-          items={history}
-          selectedCommitId={selectedCommitId}
-          baselineCommitId={baselineId}
-          onSelect={(commitId) => setSelectedCommit(commitId)}
-        />
-      </section>
     </section>
   );
 };

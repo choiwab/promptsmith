@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -33,18 +33,36 @@ class CompareOrchestrator:
         self.semantic_service = semantic_service
         self.vision_service = vision_service
 
-    async def compare(self, *, project_id: str, candidate_commit_id: str) -> ComparisonReportRecord:
+    async def compare(
+        self,
+        *,
+        project_id: str,
+        candidate_commit_id: str,
+        baseline_commit_id: str | None = None,
+    ) -> ComparisonReportRecord:
         project = self.repository.get_project(project_id)
-        baseline_commit_id = project.active_baseline_commit_id
-        if not baseline_commit_id:
+        resolved_baseline_commit_id = baseline_commit_id or project.active_baseline_commit_id
+        if not resolved_baseline_commit_id:
             raise ApiError(
                 ErrorCode.BASELINE_NOT_SET,
                 "Set a baseline before comparing commits.",
                 status_code=400,
             )
+        if resolved_baseline_commit_id == candidate_commit_id:
+            raise ApiError(
+                ErrorCode.INVALID_REQUEST,
+                "Baseline and candidate commits must be different.",
+                status_code=400,
+            )
 
-        baseline_commit = self.repository.get_commit(baseline_commit_id, project_id=project_id)
+        baseline_commit = self.repository.get_commit(resolved_baseline_commit_id, project_id=project_id)
         candidate_commit = self.repository.get_commit(candidate_commit_id, project_id=project_id)
+        if baseline_commit.status != "success" or candidate_commit.status != "success":
+            raise ApiError(
+                ErrorCode.COMMIT_NOT_FOUND,
+                "Both baseline and candidate commits must be successful generations.",
+                status_code=404,
+            )
 
         baseline_path = self._resolve_commit_image_path(baseline_commit.image_paths)
         candidate_path = self._resolve_commit_image_path(candidate_commit.image_paths)
@@ -118,13 +136,16 @@ class CompareOrchestrator:
             vision_structural_score=vision_structural_score,
         )
 
-        verdict = compute_verdict(
+        verdict = cast(
+            Literal["pass", "fail", "inconclusive"],
+            compute_verdict(
             drift_score=drift_score,
             threshold=threshold,
             degraded=degraded,
             pixel_diff_score=pixel_result.pixel_diff_score,
             semantic_available=semantic_available,
             vision_available=vision_available,
+            ),
         )
 
         if degraded:
@@ -139,7 +160,7 @@ class CompareOrchestrator:
         report = ComparisonReportRecord(
             report_id=report_id,
             project_id=project_id,
-            baseline_commit_id=baseline_commit_id,
+            baseline_commit_id=resolved_baseline_commit_id,
             candidate_commit_id=candidate_commit_id,
             pixel_diff_score=round(pixel_result.pixel_diff_score, 4),
             semantic_similarity=round(semantic_similarity, 4),
