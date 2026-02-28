@@ -13,6 +13,7 @@ router = APIRouter(tags=["compare"])
 class CompareRequest(BaseModel):
     project_id: str = Field(min_length=1)
     candidate_commit_id: str = Field(min_length=1)
+    baseline_commit_id: str | None = None
 
 
 class CompareScores(BaseModel):
@@ -53,6 +54,7 @@ async def compare(payload: CompareRequest, request: Request) -> CompareResponse:
     report = await service.compare(
         project_id=payload.project_id,
         candidate_commit_id=payload.candidate_commit_id,
+        baseline_commit_id=payload.baseline_commit_id,
     )
 
     return CompareResponse(

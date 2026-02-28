@@ -4,7 +4,7 @@ import { Button } from "../../components/Button";
 import { ErrorState } from "../../components/ErrorState";
 import { LoadingState } from "../../components/LoadingState";
 import { formatExplanationValue } from "../../api/mappers";
-import { useBaselineCommitId, useCompareResult, useHistory, useLastError, useRequestStates, useSelectedCommitId } from "../../state/selectors";
+import { useCompareResult, useHistory, useLastError, useRequestStates, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 
 const ScoreRow = ({ label, value }: { label: string; value: number }) => {
@@ -33,7 +33,6 @@ const PreviewCard = ({ title, prompt, imageUrl }: { title: string; prompt?: stri
 export const CompareDashboard = () => {
   const [showOverlay, setShowOverlay] = useState(false);
   const history = useHistory();
-  const baselineId = useBaselineCommitId();
   const selectedCommitId = useSelectedCommitId();
   const compareResult = useCompareResult();
   const requestStates = useRequestStates();
@@ -41,7 +40,7 @@ export const CompareDashboard = () => {
   const retryLastOperation = useAppStore((state) => state.retryLastOperation);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
-  const baselineCommit = history.find((item) => item.commit_id === baselineId);
+  const baselineCommit = history.find((item) => item.commit_id === compareResult?.baseline_commit_id);
   const candidateCommitId = compareResult?.candidate_commit_id ?? selectedCommitId;
   const candidateCommit = history.find((item) => item.commit_id === candidateCommitId);
 
@@ -57,15 +56,8 @@ export const CompareDashboard = () => {
     <section className="panel panel--compare">
       <header className="panel__header">
         <h2>Compare Dashboard</h2>
-        <p>Analyze drift across pixel, semantic, and structure signals.</p>
+        <p>Analyze drift across pixel, semantic, and structure signals for a selected pair.</p>
       </header>
-
-      {!baselineId ? (
-        <div className="state">
-          <p>Set a baseline commit to run regression checks.</p>
-          {lastError?.code === "BASELINE_NOT_SET" ? <p className="state__meta">BASELINE_NOT_SET</p> : null}
-        </div>
-      ) : null}
 
       {requestStates.compare === "loading" ? (
         <LoadingState message="Analyzing drift across pixel, semantic, and structure signals..." />
@@ -152,9 +144,9 @@ export const CompareDashboard = () => {
             </dl>
           </section>
         </>
-      ) : baselineId ? (
-        <div className="state">Select a non-baseline commit and run compare from history.</div>
-      ) : null}
+      ) : (
+        <div className="state">Use Compare mode in the lineage graph, then select A and B nodes.</div>
+      )}
     </section>
   );
 };

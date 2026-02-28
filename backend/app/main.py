@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from backend.app.api.routes_baseline import router as baseline_router
 from backend.app.api.routes_compare import router as compare_router
+from backend.app.api.routes_commits import router as commits_router
 from backend.app.api.routes_eval_runs import router as eval_runs_router
 from backend.app.api.routes_generate import router as generate_router
 from backend.app.api.routes_history import router as history_router
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(eval_runs_router)
     app.include_router(baseline_router)
     app.include_router(compare_router)
+    app.include_router(commits_router)
     app.include_router(history_router)
     app.include_router(projects_router)
 

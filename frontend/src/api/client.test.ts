@@ -44,4 +44,56 @@ describe("ApiClient", () => {
       status: 0
     });
   });
+
+  it("sends explicit baseline_commit_id when provided for compare", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        report_id: "r001",
+        baseline_commit_id: "c001",
+        candidate_commit_id: "c002",
+        scores: {
+          pixel_diff_score: 0.1,
+          semantic_similarity: 0.9,
+          vision_structural_score: 0.1,
+          drift_score: 0.1,
+          threshold: 0.3
+        },
+        verdict: "pass",
+        explanation: {},
+        artifacts: {}
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("http://localhost:8000");
+    await client.compare({ project_id: "default", baseline_commit_id: "c001", candidate_commit_id: "c002" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(String(init.body)).toContain("\"baseline_commit_id\":\"c001\"");
+  });
+
+  it("calls delete commit subtree endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        project_id: "default",
+        deleted_commit_ids: ["c1", "c2"],
+        deleted_report_ids: ["r1"],
+        deleted_image_objects: 1,
+        active_baseline_commit_id: null
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("http://localhost:8000");
+    await client.deleteCommit("default", "c1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = fetchMock.mock.calls[0]?.[0];
+    expect(String(url)).toContain("/commits/c1?project_id=default");
+  });
 });

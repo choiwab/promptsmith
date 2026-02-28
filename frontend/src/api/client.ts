@@ -5,6 +5,7 @@ import type {
   CompareRequest,
   CompareResponse,
   CreateEvalRunRequest,
+  DeleteCommitResponse,
   EnsureProjectRequest,
   EnsureProjectResponse,
   EvalRunResponse,
@@ -82,6 +83,13 @@ export class ApiClient {
     return this.request<CompareResponse>("/compare", {
       method: "POST",
       body: JSON.stringify(payload)
+    });
+  }
+
+  async deleteCommit(projectId: string, commitId: string): Promise<DeleteCommitResponse> {
+    const search = new URLSearchParams({ project_id: projectId });
+    return this.request<DeleteCommitResponse>(`/commits/${encodeURIComponent(commitId)}?${search.toString()}`, {
+      method: "DELETE"
     });
   }
 

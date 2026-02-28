@@ -43,6 +43,7 @@ export interface BaselineResponse {
 export interface CompareRequest {
   project_id: string;
   candidate_commit_id: string;
+  baseline_commit_id?: string;
 }
 
 export interface CompareScores {
@@ -73,7 +74,10 @@ export interface HistoryItem {
   commit_id: string;
   prompt?: string;
   parent_commit_id?: string;
+  model?: string;
+  seed?: string;
   status: string;
+  error?: string;
   created_at: string;
   image_paths?: string[];
 }
@@ -81,6 +85,14 @@ export interface HistoryItem {
 export interface HistoryResponse {
   items: HistoryItem[];
   next_cursor?: string;
+  active_baseline_commit_id?: string;
+}
+
+export interface DeleteCommitResponse {
+  project_id: string;
+  deleted_commit_ids: string[];
+  deleted_report_ids: string[];
+  deleted_image_objects: number;
   active_baseline_commit_id?: string;
 }
 
@@ -191,7 +203,7 @@ export interface RequestError {
   message: string;
   requestId?: string;
   status: number;
-  operation?: "project" | "history" | "generate" | "baseline" | "compare" | "eval";
+  operation?: "project" | "history" | "generate" | "baseline" | "compare" | "eval" | "delete";
   retryable: boolean;
 }
 

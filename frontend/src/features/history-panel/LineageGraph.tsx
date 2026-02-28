@@ -1,11 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { HistoryItem } from "../../api/types";
 
 interface LineageGraphProps {
   items: HistoryItem[];
   selectedCommitId?: string;
   baselineCommitId?: string;
-  onSelect: (commitId: string) => void;
+  compareSelectionMode: boolean;
+  compareSelectionCommitIds: string[];
+  resolveAssetUrl?: (path?: string) => string | undefined;
+  onNodeClick: (commitId: string) => void;
+  onPromptAction: (commitId: string) => void;
+  onEvalAction: (commitId: string) => void;
+  onDeleteAction: (commitId: string) => void;
 }
 
 interface PositionedNode {
@@ -18,6 +24,10 @@ interface Edge {
   from: PositionedNode;
   to: PositionedNode;
 }
+
+type TooltipDirection = "above" | "below";
+
+const TOOLTIP_ESTIMATED_HEIGHT = 220;
 
 const byCreatedAtAsc = (left: HistoryItem, right: HistoryItem): number => {
   const l = Date.parse(left.created_at);
@@ -36,10 +46,21 @@ const shortPrompt = (value?: string): string => {
     return "No prompt";
   }
   const trimmed = value.trim();
-  if (trimmed.length <= 28) {
+  if (trimmed.length <= 40) {
     return trimmed;
   }
-  return `${trimmed.slice(0, 27)}...`;
+  return `${trimmed.slice(0, 39)}...`;
+};
+
+const formatDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
 };
 
 const layoutGraph = (items: HistoryItem[]): { nodes: PositionedNode[]; edges: Edge[]; maxDepth: number } => {
@@ -109,69 +130,164 @@ const layoutGraph = (items: HistoryItem[]): { nodes: PositionedNode[]; edges: Ed
   return { nodes, edges: alignedEdges, maxDepth };
 };
 
-export const LineageGraph = ({ items, selectedCommitId, baselineCommitId, onSelect }: LineageGraphProps) => {
+export const LineageGraph = ({
+  items,
+  selectedCommitId,
+  baselineCommitId,
+  compareSelectionMode,
+  compareSelectionCommitIds,
+  resolveAssetUrl,
+  onNodeClick,
+  onPromptAction,
+  onEvalAction,
+  onDeleteAction
+}: LineageGraphProps) => {
   const { nodes, edges, maxDepth } = useMemo(() => layoutGraph(items), [items]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipDirections, setTooltipDirections] = useState<Record<string, TooltipDirection>>({});
 
-  if (nodes.length === 0) {
-    return <div className="lineage-empty">No lineage data yet.</div>;
-  }
-
-  const colWidth = 230;
-  const rowHeight = 78;
+  const colWidth = 280;
+  const rowHeight = 108;
   const padX = 28;
   const padY = 24;
-  const nodeW = 184;
-  const nodeH = 46;
-  const width = padX * 2 + (maxDepth + 1) * colWidth;
-  const height = Math.max(160, padY * 2 + nodes.length * rowHeight);
+  const nodeW = 224;
+  const nodeH = 74;
+  const width = Math.max(680, padX * 2 + (maxDepth + 1) * colWidth);
+  const height = Math.max(320, padY * 2 + Math.max(nodes.length, 1) * rowHeight);
 
   const nodeX = (depth: number): number => padX + depth * colWidth;
   const nodeY = (row: number): number => padY + row * rowHeight;
 
+  const updateTooltipDirection = (commitId: string, nodeElement: HTMLDivElement) => {
+    if (!scrollRef.current) {
+      return;
+    }
+
+    const containerRect = scrollRef.current.getBoundingClientRect();
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const spaceAbove = nodeRect.top - containerRect.top;
+    const spaceBelow = containerRect.bottom - nodeRect.bottom;
+    const direction: TooltipDirection =
+      spaceAbove < TOOLTIP_ESTIMATED_HEIGHT && spaceBelow >= spaceAbove ? "below" : "above";
+
+    setTooltipDirections((prev) => (prev[commitId] === direction ? prev : { ...prev, [commitId]: direction }));
+  };
+
+  const safeResolveAssetUrl = typeof resolveAssetUrl === "function" ? resolveAssetUrl : (path?: string) => path;
+
   return (
-    <div className="lineage-graph-scroll">
-      <svg className="lineage-graph" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Commit lineage graph">
-        {edges.map((edge) => {
-          const fromX = nodeX(edge.from.depth) + nodeW;
-          const fromY = nodeY(edge.from.row) + nodeH / 2;
-          const toX = nodeX(edge.to.depth);
-          const toY = nodeY(edge.to.row) + nodeH / 2;
-          const controlOffset = Math.max(42, (toX - fromX) / 2);
-          const d = `M ${fromX} ${fromY} C ${fromX + controlOffset} ${fromY}, ${toX - controlOffset} ${toY}, ${toX} ${toY}`;
-          return <path key={`${edge.from.item.commit_id}-${edge.to.item.commit_id}`} className="lineage-edge" d={d} />;
-        })}
+    <div className="lineage-graph-scroll" ref={scrollRef}>
+      <div className={`lineage-canvas${nodes.length === 0 ? " lineage-canvas--empty" : ""}`} style={{ width, height }}>
+        {nodes.length === 0 ? (
+          <div className="lineage-empty lineage-empty--canvas">
+            No lineage data yet. Use Add First Commit in Commit History.
+          </div>
+        ) : null}
+        <svg className="lineage-graph" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Commit lineage graph">
+          {edges.map((edge) => {
+            const fromX = nodeX(edge.from.depth) + nodeW;
+            const fromY = nodeY(edge.from.row) + nodeH / 2;
+            const toX = nodeX(edge.to.depth);
+            const toY = nodeY(edge.to.row) + nodeH / 2;
+            const controlOffset = Math.max(42, (toX - fromX) / 2);
+            const d = `M ${fromX} ${fromY} C ${fromX + controlOffset} ${fromY}, ${toX - controlOffset} ${toY}, ${toX} ${toY}`;
+            return <path key={`${edge.from.item.commit_id}-${edge.to.item.commit_id}`} className="lineage-edge" d={d} />;
+          })}
+        </svg>
 
         {nodes.map((node) => {
           const x = nodeX(node.depth);
           const y = nodeY(node.row);
           const isSelected = selectedCommitId === node.item.commit_id;
           const isBaseline = baselineCommitId === node.item.commit_id;
-          const stateClass = isSelected ? " lineage-node--selected" : isBaseline ? " lineage-node--baseline" : "";
+          const compareIndex = compareSelectionCommitIds.indexOf(node.item.commit_id);
+          const previewUrl = safeResolveAssetUrl(node.item.image_paths?.[0]);
+          const tooltipDirection = tooltipDirections[node.item.commit_id] ?? "above";
+
+          const classes = ["lineage-node-card"];
+          if (isSelected) {
+            classes.push("lineage-node-card--selected");
+          }
+          if (isBaseline) {
+            classes.push("lineage-node-card--baseline");
+          }
+          if (compareIndex === 0) {
+            classes.push("lineage-node-card--compare-a");
+          } else if (compareIndex === 1) {
+            classes.push("lineage-node-card--compare-b");
+          }
+
           return (
-            <g
+            <div
               key={node.item.commit_id}
-              className={`lineage-node${stateClass}`}
-              onClick={() => onSelect(node.item.commit_id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(node.item.commit_id);
-                }
-              }}
+              className={classes.join(" ")}
+              style={{ left: x, top: y, width: nodeW, minHeight: nodeH }}
+              onMouseEnter={(event) => updateTooltipDirection(node.item.commit_id, event.currentTarget)}
+              onFocusCapture={(event) => updateTooltipDirection(node.item.commit_id, event.currentTarget as HTMLDivElement)}
             >
-              <rect x={x} y={y} width={nodeW} height={nodeH} rx={8} />
-              <text x={x + 10} y={y + 18} className="lineage-node__title">
-                {node.item.commit_id}
-              </text>
-              <text x={x + 10} y={y + 35} className="lineage-node__prompt">
-                {shortPrompt(node.item.prompt)}
-              </text>
-            </g>
+              <button
+                type="button"
+                className="lineage-node-card__main"
+                onClick={() => onNodeClick(node.item.commit_id)}
+                aria-label={`Open commit ${node.item.commit_id}`}
+              >
+                <span className="lineage-node-card__title">{node.item.commit_id}</span>
+                <span className="lineage-node-card__prompt">{shortPrompt(node.item.prompt)}</span>
+                <span className="lineage-node-card__meta">{node.item.status}</span>
+              </button>
+
+              {compareSelectionMode && compareIndex >= 0 ? (
+                <span className="lineage-node-card__marker">{compareIndex === 0 ? "A" : "B"}</span>
+              ) : null}
+
+              <div className="lineage-node-card__actions" role="group" aria-label={`Actions for ${node.item.commit_id}`}>
+                <button
+                  type="button"
+                  className="lineage-icon-btn"
+                  title="Add child prompt"
+                  aria-label="Add child prompt"
+                  onClick={() => onPromptAction(node.item.commit_id)}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="lineage-icon-btn"
+                  title="Create eval"
+                  aria-label="Create eval"
+                  onClick={() => onEvalAction(node.item.commit_id)}
+                >
+                  E
+                </button>
+                <button
+                  type="button"
+                  className="lineage-icon-btn lineage-icon-btn--danger"
+                  title="Delete node and descendants"
+                  aria-label="Delete node and descendants"
+                  onClick={() => onDeleteAction(node.item.commit_id)}
+                >
+                  x
+                </button>
+              </div>
+
+              <div className={`lineage-node-card__tooltip lineage-node-card__tooltip--${tooltipDirection}`} role="tooltip">
+                {previewUrl ? (
+                  <img
+                    className="lineage-node-card__tooltip-image"
+                    src={previewUrl}
+                    alt={`${node.item.commit_id} preview`}
+                    loading="lazy"
+                  />
+                ) : null}
+                <strong>{node.item.commit_id}</strong>
+                <span>{node.item.status}</span>
+                <span>{formatDate(node.item.created_at)}</span>
+              </div>
+            </div>
           );
         })}
-      </svg>
+
+      </div>
     </div>
   );
 };

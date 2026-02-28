@@ -57,7 +57,11 @@ const readControls = (): EvalControlState => {
 
 const toPercent = (value: number): string => `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
 
-export const EvalWorkbench = () => {
+interface EvalWorkbenchProps {
+  anchorCommitId?: string;
+}
+
+export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const projectId = useProjectId();
   const requestStates = useRequestStates();
   const evalRun = useEvalRun();
@@ -122,7 +126,9 @@ export const EvalWorkbench = () => {
     }
 
     const lineageParentCommitId =
-      options?.useBranchParent ? topVariant?.commit_id || evalRun?.anchor_commit_id || undefined : undefined;
+      options?.useBranchParent
+        ? topVariant?.commit_id || evalRun?.anchor_commit_id || anchorCommitId || undefined
+        : anchorCommitId || undefined;
 
     const payload: CreateEvalRunRequest = {
       project_id: projectId,
@@ -274,6 +280,11 @@ export const EvalWorkbench = () => {
           {evalRun.anchor_commit_id ? (
             <p className="field-hint">
               Branch anchor: <strong>{evalRun.anchor_commit_id}</strong>
+            </p>
+          ) : null}
+          {!evalRun.anchor_commit_id && anchorCommitId ? (
+            <p className="field-hint">
+              Branch anchor: <strong>{anchorCommitId}</strong>
             </p>
           ) : null}
         </section>

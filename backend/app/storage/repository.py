@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import uuid
+from pathlib import Path
+from typing import Literal
 
 from backend.app.core.config import Settings
 from backend.app.core.errors import ApiError, ErrorCode
@@ -116,7 +118,7 @@ class Repository:
         seed: str | None,
         parent_commit_id: str | None,
         image_paths: list[str],
-        status: str,
+        status: Literal["success", "failed"],
         error: str | None,
     ) -> CommitRecord:
         with self._lock:
@@ -203,6 +205,86 @@ class Repository:
             payload = self._safe_call("insert comparison", self.supabase_mirror.insert_comparison, _model_dump(report))
             return _model_validate(ComparisonReportRecord, payload)
 
+    def delete_commit_subtree(self, *, project_id: str, commit_id: str) -> dict[str, object]:
+        with self._lock:
+            project = self.get_project(project_id)
+            self.get_commit(commit_id, project_id=project_id)
+
+            commit_payloads = self._safe_call("list commits", self.supabase_mirror.list_commits, project_id)
+            commits = [self._parse_commit(item) for item in commit_payloads]
+            by_id = {item.commit_id: item for item in commits}
+
+            children_by_parent: dict[str, list[str]] = {}
+            for item in commits:
+                if not item.parent_commit_id:
+                    continue
+                children_by_parent.setdefault(item.parent_commit_id, []).append(item.commit_id)
+
+            to_delete: set[str] = set()
+            queue = [commit_id]
+            while queue:
+                current = queue.pop(0)
+                if current in to_delete:
+                    continue
+                to_delete.add(current)
+                queue.extend(children_by_parent.get(current, []))
+
+            deleted_commit_ids = sorted(to_delete)
+            image_paths: list[str] = []
+            for deleted_id in deleted_commit_ids:
+                commit = by_id.get(deleted_id)
+                if commit:
+                    image_paths.extend(commit.image_paths)
+
+            comparison_payloads = self._safe_call("list comparisons", self.supabase_mirror.list_comparisons, project_id)
+            report_ids_to_delete: list[str] = []
+            for raw in comparison_payloads:
+                report = _model_validate(ComparisonReportRecord, raw)
+                if report.baseline_commit_id in to_delete or report.candidate_commit_id in to_delete:
+                    report_ids_to_delete.append(report.report_id)
+
+            if report_ids_to_delete:
+                self._safe_call("delete comparisons", self.supabase_mirror.delete_comparisons, report_ids_to_delete)
+            self._safe_call("delete commits", self.supabase_mirror.delete_commits, deleted_commit_ids)
+
+            artifact_delete_count = 0
+            for path in image_paths:
+                if self._delete_local_artifact(path):
+                    artifact_delete_count += 1
+                    continue
+                object_path = self._extract_storage_object_path(path)
+                if object_path:
+                    try:
+                        if self.supabase_mirror.delete_storage_object(object_path):
+                            artifact_delete_count += 1
+                    except Exception:
+                        # Keep delete best-effort for artifact cleanup.
+                        pass
+
+            active_baseline_commit_id = project.active_baseline_commit_id
+            if active_baseline_commit_id and active_baseline_commit_id in to_delete:
+                now = utc_now_iso()
+                updated = self._safe_call(
+                    "clear project baseline",
+                    self.supabase_mirror.update_project,
+                    project_id,
+                    {
+                        "active_baseline_commit_id": None,
+                        "updated_at": now,
+                    },
+                )
+                if updated:
+                    active_baseline_commit_id = _model_validate(ProjectRecord, updated).active_baseline_commit_id
+                else:
+                    active_baseline_commit_id = None
+
+            return {
+                "deleted_commit_ids": deleted_commit_ids,
+                "deleted_report_ids": sorted(report_ids_to_delete),
+                "deleted_image_objects": artifact_delete_count,
+                "active_baseline_commit_id": active_baseline_commit_id,
+            }
+
     def upload_commit_image(self, *, commit_id: str, filename: str, payload: bytes) -> str:
         return self._safe_call(
             "upload commit image",
@@ -214,6 +296,26 @@ class Repository:
 
     def _parse_commit(self, payload: dict) -> CommitRecord:
         return _model_validate(CommitRecord, payload)
+
+    def _extract_storage_object_path(self, image_path: str) -> str | None:
+        token = f"/storage/v1/object/public/{self.settings.supabase_storage_bucket}/"
+        index = image_path.find(token)
+        if index == -1:
+            return None
+        object_path = image_path[index + len(token) :].strip("/")
+        return object_path or None
+
+    def _delete_local_artifact(self, image_path: str) -> bool:
+        try:
+            path = Path(image_path)
+            if not path.is_absolute():
+                path = (Path.cwd() / path).resolve()
+            if path.exists():
+                path.unlink()
+                return True
+        except Exception:
+            return False
+        return False
 
     def _safe_call(self, operation: str, fn, *args, **kwargs):
         try:

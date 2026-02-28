@@ -16,16 +16,16 @@ beforeEach(() => {
 });
 
 describe("App smoke", () => {
-  it("renders primary panels", async () => {
+  it("renders dashboard shell without inline workbench panels", async () => {
     render(<App />);
 
-    expect(screen.getByText("Eval Workbench")).toBeInTheDocument();
-    expect(screen.getByText("Prompt Workbench")).toBeInTheDocument();
     expect(screen.getByText("Commit History")).toBeInTheDocument();
-    expect(screen.getByText("Compare Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Lineage Graph")).toBeInTheDocument();
+    expect(screen.queryByText("Eval Workbench")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prompt Workbench")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("Set a baseline commit to run regression checks.")).toBeInTheDocument();
+      expect(screen.getByText("No commits yet. Generate your first commit.")).toBeInTheDocument();
     });
   });
 });

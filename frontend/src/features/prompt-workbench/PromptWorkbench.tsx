@@ -4,7 +4,12 @@ import { LoadingState } from "../../components/LoadingState";
 import { useRequestStates, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 
-export const PromptWorkbench = () => {
+interface PromptWorkbenchProps {
+  anchorCommitId?: string;
+  onGenerated?: () => void;
+}
+
+export const PromptWorkbench = ({ anchorCommitId, onGenerated }: PromptWorkbenchProps) => {
   const minPromptLength = 5;
   const [prompt, setPrompt] = useState("");
   const [seed, setSeed] = useState("");
@@ -13,7 +18,8 @@ export const PromptWorkbench = () => {
   const generateCommit = useAppStore((state) => state.generateCommit);
   const requestStates = useRequestStates();
   const promptLength = prompt.trim().length;
-  const parentCommitId = linkToSelected ? selectedCommitId : undefined;
+  const resolvedAnchorId = anchorCommitId || selectedCommitId;
+  const parentCommitId = linkToSelected ? resolvedAnchorId : undefined;
 
   const canSubmit = useMemo(() => {
     return promptLength >= minPromptLength && requestStates.generate !== "loading";
@@ -27,6 +33,7 @@ export const PromptWorkbench = () => {
 
     await generateCommit(trimmed, seed.trim() || undefined, parentCommitId);
     setPrompt("");
+    onGenerated?.();
   };
 
   return (
@@ -65,12 +72,12 @@ export const PromptWorkbench = () => {
           id="lineage-parent-toggle"
           type="checkbox"
           checked={linkToSelected}
-          disabled={!selectedCommitId}
+          disabled={!resolvedAnchorId}
           onChange={(event) => setLinkToSelected(event.target.checked)}
         />
         <span>
           Use selected commit as lineage parent
-          {selectedCommitId ? <strong> ({selectedCommitId})</strong> : " (none selected)"}
+          {resolvedAnchorId ? <strong> ({resolvedAnchorId})</strong> : " (none selected)"}
         </span>
       </label>
       <p className="field-hint">
