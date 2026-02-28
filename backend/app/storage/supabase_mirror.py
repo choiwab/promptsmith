@@ -71,6 +71,13 @@ class SupabaseMirror:
         )
         return rows[0] if rows else None
 
+    def delete_project(self, project_id: str) -> bool:
+        rows = self._delete_rows(
+            "projects",
+            filters={"project_id": f"eq.{project_id}"},
+        )
+        return len(rows) > 0
+
     def get_commit(self, commit_id: str) -> dict[str, Any] | None:
         rows = self._select(
             "commits",

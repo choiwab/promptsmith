@@ -6,6 +6,7 @@ import type {
   CompareResponse,
   CreateEvalRunRequest,
   DeleteCommitResponse,
+  DeleteProjectResponse,
   EnsureProjectRequest,
   EnsureProjectResponse,
   EvalRunResponse,
@@ -130,6 +131,12 @@ export class ApiClient {
   async listProjects(): Promise<ListProjectsResponse> {
     return this.request<ListProjectsResponse>("/projects", {
       method: "GET"
+    });
+  }
+
+  async deleteProject(projectId: string): Promise<DeleteProjectResponse> {
+    return this.request<DeleteProjectResponse>(`/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE"
     });
   }
 

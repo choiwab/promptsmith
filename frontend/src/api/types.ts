@@ -118,6 +118,11 @@ export interface ListProjectsResponse {
   items: Project[];
 }
 
+export interface DeleteProjectResponse {
+  project_id: string;
+  deleted_image_objects: number;
+}
+
 export interface EvalConstraints {
   must_include: string[];
   must_avoid: string[];
