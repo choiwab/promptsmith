@@ -130,6 +130,8 @@
   margin: var(--space-3) 0 0;
   display: grid;
   gap: var(--space-3);
+  align-content: start;
+  grid-auto-rows: max-content;
   flex: 1;
   min-height: 0;
   max-height: none;
