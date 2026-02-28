@@ -1274,6 +1274,54 @@
   gap: var(--space-2);
 }
 
+.project-delete-confirm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.project-delete-confirm__lead {
+  margin: 0;
+  font-weight: 600;
+}
+
+.project-delete-confirm__meta {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-canvas);
+}
+
+.project-delete-confirm__meta p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.project-delete-confirm__meta span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.project-delete-confirm__meta strong {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.project-delete-confirm__warning {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: color-mix(in srgb, var(--danger-soft) 80%, transparent);
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
+}
+
 @media (max-width: 1024px) {
   .preview-grid,
   .artifact-grid {
