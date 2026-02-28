@@ -130,6 +130,8 @@
   margin: var(--space-3) 0 0;
   display: grid;
   gap: var(--space-3);
+  align-content: start;
+  grid-auto-rows: max-content;
   flex: 1;
   min-height: 0;
   max-height: none;
@@ -607,6 +609,19 @@
   margin-bottom: var(--space-4);
   border: 1px solid #ffd8d3;
   background: var(--danger-soft);
+}
+
+.error-guidance {
+  margin-top: var(--space-2);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.error-guidance ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .toast-host {

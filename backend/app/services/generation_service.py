@@ -24,9 +24,14 @@ class GenerationService:
         model: str,
         seed: str | None,
         parent_commit_id: str | None,
+        force_root: bool = False,
     ):
         self.repository.ensure_project(project_id)
-        parent_commit = self._resolve_parent_commit(project_id=project_id, parent_commit_id=parent_commit_id)
+        parent_commit = self._resolve_parent_commit(
+            project_id=project_id,
+            parent_commit_id=parent_commit_id,
+            force_root=force_root,
+        )
         effective_parent_commit_id = parent_commit.commit_id if parent_commit else None
         commit_id = self.repository.reserve_commit_id()
         effective_prompt = self._with_parent_context(prompt=prompt, parent_commit=parent_commit)
@@ -87,7 +92,16 @@ class GenerationService:
                 status_code=502,
             ) from exc
 
-    def _resolve_parent_commit(self, *, project_id: str, parent_commit_id: str | None) -> CommitRecord | None:
+    def _resolve_parent_commit(
+        self,
+        *,
+        project_id: str,
+        parent_commit_id: str | None,
+        force_root: bool,
+    ) -> CommitRecord | None:
+        if force_root:
+            return None
+
         if parent_commit_id:
             parent_commit = self.repository.get_commit(parent_commit_id, project_id=project_id)
             self._validate_parent_commit(parent_commit)
