@@ -49,20 +49,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: var(--bg-elevated);
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 0.82rem;
-  transition: background-color 100ms ease;
+  font-size: 0.88rem;
+  transition: background-color 100ms ease, color 100ms ease;
 }
 
 .sidebar__collapse-btn:hover {
-  background: var(--bg-canvas);
+  background: var(--border);
+  color: var(--text);
 }
 
 /* Hide everything except the toggle when collapsed */
@@ -134,7 +135,7 @@
 }
 
 .sidebar__item-btn:hover {
-  background: var(--bg-canvas);
+  background: var(--bg-elevated);
 }
 
 .sidebar__item--active .sidebar__item-btn {
@@ -235,8 +236,8 @@
   gap: var(--space-4);
   padding: var(--space-6) var(--space-8) var(--space-4);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
-  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 .app-header__identity {
@@ -407,7 +408,7 @@
     position: fixed;
     inset: 0;
     z-index: 19;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.6);
   }
 
   .sidebar__backdrop--visible {

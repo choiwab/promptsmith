@@ -4,6 +4,7 @@ import {
   useCompareSelectionCommitIds,
   useCompareSelectionMode,
   useHistory,
+  useProjectId,
   useSelectedCommitId
 } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
@@ -15,6 +16,7 @@ interface LineageWorkspaceProps {
 
 export const LineageWorkspace = ({ fullscreen = false }: LineageWorkspaceProps) => {
   const history = useHistory();
+  const projectId = useProjectId();
   const baselineCommitId = useBaselineCommitId();
   const selectedCommitId = useSelectedCommitId();
   const compareSelectionMode = useCompareSelectionMode();
@@ -24,6 +26,8 @@ export const LineageWorkspace = ({ fullscreen = false }: LineageWorkspaceProps) 
   const openEvalModal = useAppStore((state) => state.openEvalModal);
   const openCommitInfoModal = useAppStore((state) => state.openCommitInfoModal);
   const requestDeleteCommit = useAppStore((state) => state.requestDeleteCommit);
+  const lineageNodePositions = useAppStore((state) => state.lineageNodePositionsByProject[state.projectId]);
+  const setLineageNodePositions = useAppStore((state) => state.setLineageNodePositions);
   const selectCompareNode = useAppStore((state) => state.selectCompareNode);
   const toggleCompareSelectionMode = useAppStore((state) => state.toggleCompareSelectionMode);
   const setGraphFullscreenOpen = useAppStore((state) => state.setGraphFullscreenOpen);
@@ -44,7 +48,11 @@ export const LineageWorkspace = ({ fullscreen = false }: LineageWorkspaceProps) 
             <p className="lineage-section__hint">
               Compare mode: select {compareSelectionCommitIds.length === 0 ? "A (baseline)" : "B (candidate)"} node.
             </p>
-          ) : null}
+          ) : (
+            <p className="lineage-section__hint">
+              Drag background to pan. Shift+drag to multi-select, then drag a selected node to move the group.
+            </p>
+          )}
         </div>
         <div className="lineage-section__controls">
           <Button
@@ -67,6 +75,9 @@ export const LineageWorkspace = ({ fullscreen = false }: LineageWorkspaceProps) 
         compareSelectionMode={compareSelectionMode}
         compareSelectionCommitIds={compareSelectionCommitIds}
         resolveAssetUrl={resolveAssetUrl}
+        positionsScopeKey={projectId}
+        persistedNodePositions={lineageNodePositions}
+        onNodePositionsChange={(positions) => setLineageNodePositions(projectId, positions)}
         onNodeClick={(commitId) => {
           setSelectedCommit(commitId);
           if (compareSelectionMode) {

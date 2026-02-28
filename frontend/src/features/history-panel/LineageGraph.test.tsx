@@ -32,6 +32,7 @@ describe("LineageGraph", () => {
         baselineCommitId={undefined}
         compareSelectionMode={false}
         compareSelectionCommitIds={[]}
+        positionsScopeKey="default"
         resolveAssetUrl={(path) => (path ? `http://localhost:8000${path}` : undefined)}
         onNodeClick={onNodeClick}
         onPromptAction={onPromptAction}
@@ -59,6 +60,7 @@ describe("LineageGraph", () => {
         baselineCommitId={undefined}
         compareSelectionMode
         compareSelectionCommitIds={["c001", "c002"]}
+        positionsScopeKey="default"
         resolveAssetUrl={(path) => (path ? `http://localhost:8000${path}` : undefined)}
         onNodeClick={vi.fn()}
         onPromptAction={vi.fn()}
@@ -69,5 +71,38 @@ describe("LineageGraph", () => {
 
     expect(screen.getAllByText("A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("B").length).toBeGreaterThan(0);
+  });
+
+  it("renders interactive canvas for drag and pan gestures", () => {
+    const { container } = render(
+      <LineageGraph
+        items={items}
+        selectedCommitId={undefined}
+        baselineCommitId={undefined}
+        compareSelectionMode={false}
+        compareSelectionCommitIds={[]}
+        positionsScopeKey="default"
+        resolveAssetUrl={(path) => (path ? `http://localhost:8000${path}` : undefined)}
+        onNodeClick={vi.fn()}
+        onPromptAction={vi.fn()}
+        onEvalAction={vi.fn()}
+        onDeleteAction={vi.fn()}
+      />
+    );
+
+    const scroll = container.querySelector(".lineage-graph-scroll");
+    const canvas = container.querySelector(".lineage-canvas");
+    const nodeMain = screen.getByRole("button", { name: "Open commit c001" });
+    expect(scroll).not.toBeNull();
+    expect(canvas).not.toBeNull();
+    expect(nodeMain).toBeInTheDocument();
+
+    if (!canvas) {
+      return;
+    }
+
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.pointerMove(canvas, { clientX: 60, clientY: 60 });
+    fireEvent.pointerUp(canvas, { clientX: 60, clientY: 60 });
   });
 });
