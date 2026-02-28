@@ -576,7 +576,8 @@ export const LineageGraph = ({
                 <button
                   type="button"
                   className="lineage-icon-btn"
-                  title="Add child prompt"
+                  data-tooltip="Open Prompt Workbench to create a child commit from this node."
+                  title="Open Prompt Workbench to create a child commit from this node."
                   aria-label="Add child prompt"
                   onClick={() => onPromptAction(node.item.commit_id)}
                 >
@@ -585,7 +586,8 @@ export const LineageGraph = ({
                 <button
                   type="button"
                   className="lineage-icon-btn"
-                  title="Create eval"
+                  data-tooltip="Open Eval Workbench to run evaluations anchored to this commit."
+                  title="Open Eval Workbench to run evaluations anchored to this commit."
                   aria-label="Create eval"
                   onClick={() => onEvalAction(node.item.commit_id)}
                 >
@@ -594,7 +596,8 @@ export const LineageGraph = ({
                 <button
                   type="button"
                   className="lineage-icon-btn lineage-icon-btn--danger"
-                  title="Delete node and descendants"
+                  data-tooltip="Delete this commit and all descendant nodes."
+                  title="Delete this commit and all descendant nodes."
                   aria-label="Delete node and descendants"
                   onClick={() => onDeleteAction(node.item.commit_id)}
                 >

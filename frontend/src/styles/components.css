@@ -294,6 +294,7 @@
 
 .lineage-canvas {
   position: relative;
+  isolation: isolate;
 }
 
 .lineage-canvas--dragging-nodes,
@@ -320,6 +321,7 @@
 
 .lineage-node-card {
   position: absolute;
+  z-index: 2;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-panel);
@@ -330,6 +332,11 @@
 .lineage-node-card:hover {
   border-color: var(--border-strong);
   transform: translateY(-1px);
+}
+
+.lineage-node-card:hover,
+.lineage-node-card:focus-within {
+  z-index: 40;
 }
 
 .lineage-node-card--selected {
@@ -401,6 +408,7 @@
 }
 
 .lineage-icon-btn {
+  position: relative;
   width: 1.45rem;
   height: 1.45rem;
   border-radius: 999px;
@@ -415,6 +423,50 @@
   border-color: var(--border-strong);
 }
 
+.lineage-icon-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.35rem);
+  transform: translateX(-50%);
+  min-width: 150px;
+  max-width: 220px;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 11, 18, 0.95);
+  color: #fff;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 80;
+}
+
+.lineage-icon-btn::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.1rem);
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid rgba(8, 11, 18, 0.95);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 80;
+}
+
+.lineage-icon-btn:hover::after,
+.lineage-icon-btn:hover::before,
+.lineage-icon-btn:focus-visible::after,
+.lineage-icon-btn:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
+
 .lineage-icon-btn--danger {
   color: var(--danger);
 }
@@ -423,7 +475,7 @@
   position: absolute;
   left: 0.4rem;
   display: none;
-  z-index: 4;
+  z-index: 70;
   background: #000;
   color: #fff;
   border-radius: var(--radius-sm);
