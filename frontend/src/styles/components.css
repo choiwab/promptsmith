@@ -1432,6 +1432,10 @@
   padding: var(--space-4);
 }
 
+.modal-backdrop--fullscreen {
+  padding: 0.35rem;
+}
+
 .modal {
   width: min(960px, 100%);
   max-height: calc(100vh - 4rem);
@@ -1457,8 +1461,18 @@
 }
 
 .modal--fullscreen {
-  width: min(1320px, 100%);
-  max-height: calc(100vh - 2rem);
+  width: 100%;
+  max-width: none;
+  height: calc(100dvh - 0.7rem);
+  max-height: calc(100dvh - 0.7rem);
+}
+
+.modal--fullscreen .modal__header {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.modal--fullscreen .modal__body {
+  padding: var(--space-2) var(--space-4) var(--space-4);
 }
 
 .modal__header {

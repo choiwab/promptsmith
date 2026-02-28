@@ -63,8 +63,10 @@ export const Modal = ({ open, title, onClose, size = "lg", footer, children }: P
     return null;
   }
 
+  const backdropClassName = `modal-backdrop${size === "fullscreen" ? " modal-backdrop--fullscreen" : ""}`;
+
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className={backdropClassName} onClick={onClose} role="presentation">
       <div
         className={`modal modal--${size}`}
         role="dialog"
