@@ -1,16 +1,18 @@
 import { create } from "zustand";
 import { apiClient, ApiClientError } from "../api/client";
-import { normalizeCompareResponse, normalizeHistoryResponse } from "../api/mappers";
+import { normalizeCompareResponse, normalizeEvalRunResponse, normalizeHistoryResponse } from "../api/mappers";
 import type {
   AppToast,
   AsyncState,
   CompareResponse,
+  CreateEvalRunRequest,
+  EvalRunResponse,
   HistoryItem,
   Project,
   RequestError
 } from "../api/types";
 
-type OperationKey = "project" | "history" | "generate" | "baseline" | "compare";
+type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" | "eval";
 
 type LastOperation =
   | { kind: "project"; projectId: string; name?: string }
@@ -18,6 +20,7 @@ type LastOperation =
   | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string }
   | { kind: "baseline"; commitId: string }
   | { kind: "compare"; commitId: string }
+  | { kind: "eval"; payload: CreateEvalRunRequest }
   | null;
 
 interface RequestStates {
@@ -26,6 +29,7 @@ interface RequestStates {
   generate: AsyncState;
   baseline: AsyncState;
   compare: AsyncState;
+  eval: AsyncState;
 }
 
 interface AppState {
@@ -37,6 +41,7 @@ interface AppState {
   activeBaselineCommitId?: string;
   selectedCommitId?: string;
   latestCompareResult?: CompareResponse;
+  latestEvalRun?: EvalRunResponse;
   requestStates: RequestStates;
   lastError?: RequestError;
   lastOperation: LastOperation;
@@ -51,6 +56,7 @@ interface AppState {
   generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
   setBaseline: (commitId: string) => Promise<void>;
   compareCommit: (commitId: string) => Promise<void>;
+  runEvalPipeline: (payload: CreateEvalRunRequest) => Promise<void>;
   retryLastOperation: () => Promise<void>;
   resolveAssetUrl: (path?: string) => string | undefined;
 }
@@ -60,7 +66,8 @@ const initialRequestStates: RequestStates = {
   history: "idle",
   generate: "idle",
   baseline: "idle",
-  compare: "idle"
+  compare: "idle",
+  eval: "idle"
 };
 
 const toRequestError = (error: unknown, operation: OperationKey): RequestError => {
@@ -88,6 +95,8 @@ const pushToastState = (state: AppState, toast: AppToast): AppToast[] => {
   return [...state.toasts, toast].slice(-5);
 };
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const useAppStore = create<AppState>((set, get) => ({
   projectId: "default",
   projects: [],
@@ -97,6 +106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeBaselineCommitId: undefined,
   selectedCommitId: undefined,
   latestCompareResult: undefined,
+  latestEvalRun: undefined,
   requestStates: initialRequestStates,
   lastError: undefined,
   lastOperation: null,
@@ -158,6 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeBaselineCommitId: response.active_baseline_commit_id,
         selectedCommitId: undefined,
         latestCompareResult: undefined,
+        latestEvalRun: undefined,
         requestStates: setRequestState(state, "project", "success"),
         toasts: pushToastState(state, {
           id: `${Date.now()}-project`,
@@ -435,6 +446,96 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  runEvalPipeline: async (payload) => {
+    const normalizedPayload: CreateEvalRunRequest = {
+      ...payload,
+      constraints: {
+        must_include: payload.constraints?.must_include ?? [],
+        must_avoid: payload.constraints?.must_avoid ?? []
+      }
+    };
+
+    set((state) => ({
+      requestStates: setRequestState(state, "eval", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "eval", payload: normalizedPayload }
+    }));
+
+    try {
+      let currentRun = normalizeEvalRunResponse(await apiClient.createEvalRun(normalizedPayload));
+      set({ latestEvalRun: currentRun });
+
+      const terminalStatuses = new Set(["completed", "completed_degraded", "failed"]);
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        if (terminalStatuses.has(currentRun.status)) {
+          break;
+        }
+
+        await sleep(1200);
+        currentRun = normalizeEvalRunResponse(await apiClient.getEvalRun(currentRun.run_id));
+        set({ latestEvalRun: currentRun });
+      }
+
+      if (currentRun.status === "failed") {
+        const failure: RequestError = {
+          code: "EVAL_RUN_FAILED",
+          message: currentRun.error || "Eval run failed.",
+          status: 500,
+          operation: "eval",
+          retryable: true
+        };
+        set((state) => ({
+          requestStates: setRequestState(state, "eval", "error"),
+          lastError: failure,
+          toasts: pushToastState(state, {
+            id: `${Date.now()}-eval-failed`,
+            kind: "error",
+            message: failure.message
+          })
+        }));
+        return;
+      }
+
+      if (!terminalStatuses.has(currentRun.status)) {
+        set((state) => ({
+          requestStates: setRequestState(state, "eval", "success"),
+          toasts: pushToastState(state, {
+            id: `${Date.now()}-eval-running`,
+            kind: "info",
+            message: `Eval run ${currentRun.run_id} is still running in background.`
+          })
+        }));
+        return;
+      }
+
+      set((state) => ({
+        requestStates: setRequestState(state, "eval", "success"),
+        latestEvalRun: currentRun,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-eval-success`,
+          kind: currentRun.degraded ? "info" : "success",
+          message: currentRun.degraded
+            ? `Eval ${currentRun.run_id} completed in degraded mode.`
+            : `Eval ${currentRun.run_id} completed.`
+        })
+      }));
+
+      await get().fetchHistory();
+      set({ lastOperation: { kind: "eval", payload: normalizedPayload } });
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "eval");
+      set((state) => ({
+        requestStates: setRequestState(state, "eval", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-eval-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
   retryLastOperation: async () => {
     const op = get().lastOperation;
     if (!op) {
@@ -458,6 +559,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (op.kind === "baseline") {
       await get().setBaseline(op.commitId);
+      return;
+    }
+
+    if (op.kind === "eval") {
+      await get().runEvalPipeline(op.payload);
       return;
     }
 

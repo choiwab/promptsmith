@@ -4,8 +4,10 @@ import type {
   BaselineResponse,
   CompareRequest,
   CompareResponse,
+  CreateEvalRunRequest,
   EnsureProjectRequest,
   EnsureProjectResponse,
+  EvalRunResponse,
   GenerateRequest,
   GenerateResponse,
   HistoryResponse,
@@ -80,6 +82,19 @@ export class ApiClient {
     return this.request<CompareResponse>("/compare", {
       method: "POST",
       body: JSON.stringify(payload)
+    });
+  }
+
+  async createEvalRun(payload: CreateEvalRunRequest): Promise<EvalRunResponse> {
+    return this.request<EvalRunResponse>("/eval-runs", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async getEvalRun(runId: string): Promise<EvalRunResponse> {
+    return this.request<EvalRunResponse>(`/eval-runs/${encodeURIComponent(runId)}`, {
+      method: "GET"
     });
   }
 

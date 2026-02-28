@@ -10,6 +10,7 @@ from pathlib import Path
 class Settings:
     openai_api_key: str | None
     openai_image_model: str
+    openai_text_model: str
     openai_vision_model: str
     app_data_dir: Path
     app_image_dir: Path
@@ -51,6 +52,7 @@ def get_settings() -> Settings:
     return Settings(
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_image_model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+        openai_text_model=os.getenv("OPENAI_TEXT_MODEL", "gpt-4.1-mini"),
         openai_vision_model=os.getenv("OPENAI_VISION_MODEL", "gpt-4.1-mini"),
         app_data_dir=data_dir,
         app_image_dir=image_dir,

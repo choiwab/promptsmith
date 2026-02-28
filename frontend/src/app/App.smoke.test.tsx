@@ -19,6 +19,7 @@ describe("App smoke", () => {
   it("renders primary panels", async () => {
     render(<App />);
 
+    expect(screen.getByText("Eval Workbench")).toBeInTheDocument();
     expect(screen.getByText("Prompt Workbench")).toBeInTheDocument();
     expect(screen.getByText("Commit History")).toBeInTheDocument();
     expect(screen.getByText("Compare Dashboard")).toBeInTheDocument();

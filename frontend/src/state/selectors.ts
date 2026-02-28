@@ -7,6 +7,7 @@ export const useProjects = (): Project[] => useAppStore((state) => state.project
 export const useBaselineCommitId = (): string | undefined => useAppStore((state) => state.activeBaselineCommitId);
 export const useSelectedCommitId = (): string | undefined => useAppStore((state) => state.selectedCommitId);
 export const useCompareResult = () => useAppStore((state) => state.latestCompareResult);
+export const useEvalRun = () => useAppStore((state) => state.latestEvalRun);
 export const useRequestStates = () => useAppStore((state) => state.requestStates);
 export const useLastError = (): RequestError | undefined => useAppStore((state) => state.lastError);
 export const useToasts = (): AppToast[] => useAppStore((state) => state.toasts);

@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from backend.app.api.routes_baseline import router as baseline_router
 from backend.app.api.routes_compare import router as compare_router
+from backend.app.api.routes_eval_runs import router as eval_runs_router
 from backend.app.api.routes_generate import router as generate_router
 from backend.app.api.routes_history import router as history_router
 from backend.app.api.routes_projects import router as projects_router
@@ -19,6 +20,7 @@ from backend.app.core.config import get_settings
 from backend.app.core.errors import ApiError, ErrorCode, error_response, request_id_from_request
 from backend.app.core.logging import configure_logging
 from backend.app.services.compare_orchestrator import CompareOrchestrator
+from backend.app.services.eval_pipeline_service import EvalPipelineService
 from backend.app.services.generation_service import GenerationService
 from backend.app.services.pixel_metrics import PixelMetricsService
 from backend.app.services.semantic_metrics import SemanticMetricsService
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
     repository = Repository(settings)
 
     generation_service = GenerationService(settings=settings, repository=repository)
+    eval_pipeline_service = EvalPipelineService(settings=settings, repository=repository)
     compare_orchestrator = CompareOrchestrator(
         settings=settings,
         repository=repository,
@@ -56,6 +59,7 @@ def create_app() -> FastAPI:
     app.state.settings = settings
     app.state.repository = repository
     app.state.generation_service = generation_service
+    app.state.eval_pipeline_service = eval_pipeline_service
     app.state.compare_orchestrator = compare_orchestrator
 
     @app.middleware("http")
@@ -138,6 +142,7 @@ def create_app() -> FastAPI:
     app.mount("/artifacts", StaticFiles(directory=str(settings.app_artifact_dir)), name="artifacts")
 
     app.include_router(generate_router)
+    app.include_router(eval_runs_router)
     app.include_router(baseline_router)
     app.include_router(compare_router)
     app.include_router(history_router)

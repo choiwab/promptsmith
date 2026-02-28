@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ErrorState } from "../components/ErrorState";
 import { CompareDashboard } from "../features/compare-dashboard/CompareDashboard";
+import { EvalWorkbench } from "../features/eval-workbench/EvalWorkbench";
 import { HistoryPanel } from "../features/history-panel/HistoryPanel";
 import { ToastHost } from "../features/notifications/ToastHost";
 import { ProjectSidebar } from "../features/project-sidebar/ProjectSidebar";
@@ -31,7 +32,8 @@ export const App = () => {
     requestStates.history === "error" &&
     history.length === 0 &&
     (lastError?.code === "API_UNAVAILABLE" || lastError?.code === "REQUEST_TIMEOUT");
-  const showInlineError = Boolean(lastError) && !showBlockingError && lastError?.operation !== "compare";
+  const showInlineError =
+    Boolean(lastError) && !showBlockingError && lastError?.operation !== "compare" && lastError?.operation !== "eval";
 
   return (
     <div className="app-shell">
@@ -59,6 +61,7 @@ export const App = () => {
             <span className="app-header__chip">Project: {projectId}</span>
             <span className="app-header__chip">Lineage-aware generations</span>
             <span className="app-header__chip">Compare pipeline</span>
+            <span className="app-header__chip">Eval loop</span>
           </div>
         </header>
 
@@ -83,7 +86,10 @@ export const App = () => {
         ) : null}
 
         <main className="app-layout" aria-label="Promptsmith workspace">
-          <PromptWorkbench />
+          <div className="app-column">
+            <EvalWorkbench />
+            <PromptWorkbench />
+          </div>
           <HistoryPanel />
           <CompareDashboard />
         </main>

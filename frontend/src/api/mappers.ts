@@ -1,4 +1,4 @@
-import type { CompareResponse, HistoryResponse, HistoryItem } from "./types";
+import type { CompareResponse, EvalRunResponse, HistoryResponse, HistoryItem } from "./types";
 
 const byCreatedAtDesc = (a: HistoryItem, b: HistoryItem): number => {
   const left = new Date(a.created_at).getTime();
@@ -21,6 +21,21 @@ export const normalizeCompareResponse = (input: CompareResponse): CompareRespons
     artifacts: {
       diff_heatmap: input.artifacts?.diff_heatmap,
       overlay: input.artifacts?.overlay
+    }
+  };
+};
+
+export const normalizeEvalRunResponse = (input: EvalRunResponse): EvalRunResponse => {
+  return {
+    ...input,
+    degraded: Boolean(input.degraded),
+    variants: Array.isArray(input.variants) ? input.variants : [],
+    leaderboard: Array.isArray(input.leaderboard) ? input.leaderboard : [],
+    top_k: Array.isArray(input.top_k) ? input.top_k : [],
+    suggestions: {
+      conservative: input.suggestions?.conservative ?? { prompt_text: "", rationale: "" },
+      balanced: input.suggestions?.balanced ?? { prompt_text: "", rationale: "" },
+      aggressive: input.suggestions?.aggressive ?? { prompt_text: "", rationale: "" }
     }
   };
 };
