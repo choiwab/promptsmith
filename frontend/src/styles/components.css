@@ -285,10 +285,21 @@
     linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 / 34px 34px,
     linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px) 0 0 / 34px 34px,
     var(--bg-canvas);
+  cursor: grab;
+}
+
+.lineage-graph-scroll--panning {
+  cursor: grabbing;
 }
 
 .lineage-canvas {
   position: relative;
+}
+
+.lineage-canvas--dragging-nodes,
+.lineage-canvas--dragging-nodes .lineage-node-card__main {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .lineage-canvas--empty .lineage-graph {
@@ -324,6 +335,11 @@
 .lineage-node-card--selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.3);
+}
+
+.lineage-node-card--multi {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .lineage-node-card--baseline {
@@ -416,6 +432,7 @@
   min-width: 170px;
   max-width: 200px;
   gap: 0.12rem;
+  pointer-events: none;
 }
 
 .lineage-node-card__tooltip--above {
@@ -453,6 +470,14 @@
   place-items: center;
   font-size: 0.68rem;
   font-weight: 700;
+}
+
+.lineage-selection-rect {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
+  pointer-events: none;
 }
 
 .score-grid {

@@ -14,6 +14,13 @@ import type {
 
 type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" | "eval" | "delete";
 
+interface LineageNodePoint {
+  x: number;
+  y: number;
+}
+
+type LineageNodePositions = Record<string, LineageNodePoint>;
+
 type LastOperation =
   | { kind: "project"; projectId: string; name?: string }
   | { kind: "history" }
@@ -56,10 +63,12 @@ interface AppState {
   compareModalOpen: boolean;
   commitInfoCommitId?: string;
   graphFullscreenOpen: boolean;
+  lineageNodePositionsByProject: Record<string, LineageNodePositions>;
   compareSelectionMode: boolean;
   compareSelectionCommitIds: string[];
   deleteTargetCommitId?: string;
   setSelectedCommit: (commitId?: string) => void;
+  setLineageNodePositions: (projectId: string, positions: LineageNodePositions) => void;
   dismissToast: (id: string) => void;
   pushToast: (kind: AppToast["kind"], message: string) => void;
   clearError: () => void;
@@ -140,6 +149,28 @@ const pushToastState = (state: AppState, toast: AppToast): AppToast[] => {
   return [...state.toasts, toast].slice(-5);
 };
 
+const areLineagePositionsEqual = (left: LineageNodePositions, right: LineageNodePositions): boolean => {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const key of leftKeys) {
+    const leftPoint = left[key];
+    const rightPoint = right[key];
+    if (!rightPoint) {
+      return false;
+    }
+    if (leftPoint.x !== rightPoint.x || leftPoint.y !== rightPoint.y) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -164,12 +195,32 @@ export const useAppStore = create<AppState>((set, get) => ({
   compareModalOpen: false,
   commitInfoCommitId: undefined,
   graphFullscreenOpen: false,
+  lineageNodePositionsByProject: {},
   compareSelectionMode: false,
   compareSelectionCommitIds: [],
   deleteTargetCommitId: undefined,
 
   setSelectedCommit: (commitId) => {
     set({ selectedCommitId: commitId });
+  },
+
+  setLineageNodePositions: (projectId, positions) => {
+    const targetProjectId = projectId.trim();
+    if (!targetProjectId) {
+      return;
+    }
+    set((state) => {
+      const current = state.lineageNodePositionsByProject[targetProjectId] ?? {};
+      if (areLineagePositionsEqual(current, positions)) {
+        return state;
+      }
+      return {
+        lineageNodePositionsByProject: {
+          ...state.lineageNodePositionsByProject,
+          [targetProjectId]: positions
+        }
+      };
+    });
   },
 
   dismissToast: (id) => {
@@ -577,6 +628,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         const selectedCommitId = state.selectedCommitId && deletedIds.has(state.selectedCommitId)
           ? history[0]?.commit_id
           : state.selectedCommitId;
+        const currentProjectPositions = state.lineageNodePositionsByProject[state.projectId] ?? {};
+        const filteredProjectPositions = Object.fromEntries(
+          Object.entries(currentProjectPositions).filter(([id]) => !deletedIds.has(id))
+        ) as LineageNodePositions;
         const latestCompareResult =
           state.latestCompareResult &&
           (deletedIds.has(state.latestCompareResult.baseline_commit_id) ||
@@ -590,6 +645,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           latestCompareResult,
           activeBaselineCommitId: response.active_baseline_commit_id,
           deleteTargetCommitId: undefined,
+          lineageNodePositionsByProject: {
+            ...state.lineageNodePositionsByProject,
+            [state.projectId]: filteredProjectPositions
+          },
           requestStates: setRequestState(state, "delete", "success"),
           commitInfoCommitId: state.commitInfoCommitId && deletedIds.has(state.commitInfoCommitId) ? undefined : state.commitInfoCommitId,
           toasts: pushToastState(state, {
