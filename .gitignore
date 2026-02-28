@@ -7,3 +7,14 @@ frontend/coverage
 *.log
 .env
 frontend/.env.local
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+node_modules/
+data/
+images/
+artifacts/
+backend/openapi.json
