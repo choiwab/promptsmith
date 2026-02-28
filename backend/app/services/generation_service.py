@@ -4,7 +4,7 @@ import base64
 
 import httpx
 
-from backend.app.core.config import Settings, to_relative_path
+from backend.app.core.config import Settings
 from backend.app.core.errors import ApiError, ErrorCode
 from backend.app.storage.repository import Repository
 
@@ -34,10 +34,6 @@ class GenerationService:
                 model=model,
                 seed=seed,
             )
-            image_path = self.settings.app_image_dir / commit_id / "img_01.png"
-            self.repository.store.atomic_write_bytes(image_path, image_bytes)
-
-            image_rel_path = to_relative_path(image_path)
             supabase_image_url = self.repository.upload_commit_image(
                 commit_id=commit_id,
                 filename="img_01.png",
@@ -50,7 +46,7 @@ class GenerationService:
                 model=model,
                 seed=seed,
                 parent_commit_id=parent_commit_id,
-                image_paths=[supabase_image_url or image_rel_path],
+                image_paths=[supabase_image_url],
                 status="success",
                 error=None,
             )

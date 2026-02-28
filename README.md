@@ -7,8 +7,9 @@ Track B frontend implementation for Promptsmith.
 ```bash
 cp .env.docker.example .env
 ```
-2. (Optional) Set `OPENAI_API_KEY` in `.env` if you want `/generate` to call OpenAI.
-3. Start everything:
+2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env` (required).
+3. (Optional) Set `OPENAI_API_KEY` in `.env` if you want `/generate` to call OpenAI.
+4. Start everything:
 ```bash
 docker compose up --build
 ```
@@ -38,8 +39,8 @@ VITE_API_BASE_URL=http://localhost:8000
 VITE_APP_NAME=Promptsmith
 ```
 
-Backend also supports optional Supabase mirroring for commit prompts + generated images.
-Set these values in `.env` / Docker env if you want Supabase persistence:
+Backend persistence is Supabase-only (projects, commits, comparisons, image storage).
+Set these values in `.env` / Docker env:
 
 ```bash
 SUPABASE_URL=https://<project-ref>.supabase.co
@@ -49,7 +50,7 @@ SUPABASE_TABLE_PREFIX=promptsmith_
 SUPABASE_SCHEMA=public
 ```
 
-Before enabling it, run `backend/supabase/schema.sql` in Supabase SQL Editor.
+Run `backend/supabase/schema.sql` in Supabase SQL Editor before starting the backend.
 
 ## Public Access
 - No login is required in this app.

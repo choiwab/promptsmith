@@ -6,17 +6,21 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from backend.app.core.config import get_settings, to_relative_path
+from backend.app.core.config import get_settings
 from backend.app.services.pixel_metrics import PixelMetricsService
 from backend.app.services.scoring import compute_drift_score, compute_verdict
 from backend.app.storage.repository import Repository
 from backend.app.storage.schemas import ComparisonReportRecord, utc_now_iso
 
 
-def _save_image_atomic(repository: Repository, path: Path, image: Image.Image) -> None:
+def _encode_png_bytes(image: Image.Image) -> bytes:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
-    repository.store.atomic_write_bytes(path, buffer.getvalue())
+    return buffer.getvalue()
+
+
+def _save_image_atomic(repository: Repository, path: Path, payload: bytes) -> None:
+    repository.store.atomic_write_bytes(path, payload)
 
 
 def _create_demo_image(variant: int) -> Image.Image:
@@ -41,13 +45,14 @@ def _create_demo_image(variant: int) -> Image.Image:
 def main() -> None:
     settings = get_settings()
 
-    # Seed data must be deterministic, so reset persisted assets first.
-    for directory in [settings.app_data_dir, settings.app_image_dir, settings.app_artifact_dir]:
+    # Seed data must be deterministic, so reset local working assets first.
+    for directory in [settings.app_image_dir, settings.app_artifact_dir]:
         if directory.exists():
             shutil.rmtree(directory)
     settings.ensure_directories()
 
     repository = Repository(settings)
+    repository.reset_storage()
     pixel_service = PixelMetricsService()
 
     project_id = "default"
@@ -60,8 +65,14 @@ def main() -> None:
         commit_ids.append(commit_id)
 
         image = _create_demo_image(variant)
+        image_bytes = _encode_png_bytes(image)
         image_path = settings.app_image_dir / commit_id / "img_01.png"
-        _save_image_atomic(repository, image_path, image)
+        _save_image_atomic(repository, image_path, image_bytes)
+        image_url = repository.upload_commit_image(
+            commit_id=commit_id,
+            filename="img_01.png",
+            payload=image_bytes,
+        )
 
         repository.create_commit(
             commit_id=commit_id,
@@ -70,7 +81,7 @@ def main() -> None:
             model=settings.openai_image_model,
             seed=str(1000 + variant),
             parent_commit_id=parent_commit_id,
-            image_paths=[to_relative_path(image_path)],
+            image_paths=[image_url],
             status="success",
             error=None,
         )
@@ -78,7 +89,7 @@ def main() -> None:
     repository.set_baseline(project_id=project_id, commit_id=commit_ids[0])
 
     threshold = repository.get_config().threshold
-    baseline_image = Path.cwd() / f"images/{commit_ids[0]}/img_01.png"
+    baseline_image = settings.app_image_dir / commit_ids[0] / "img_01.png"
 
     compare_specs = [
         {
@@ -108,7 +119,7 @@ def main() -> None:
     for spec in compare_specs:
         report_id = repository.reserve_report_id()
         artifact_dir = settings.app_artifact_dir / report_id
-        candidate_image = Path.cwd() / f"images/{spec['candidate_id']}/img_01.png"
+        candidate_image = settings.app_image_dir / spec["candidate_id"] / "img_01.png"
 
         pixel = pixel_service.compare(
             baseline_image_path=baseline_image,

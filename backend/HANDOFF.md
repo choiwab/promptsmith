@@ -17,7 +17,7 @@
 - Output file: `backend/openapi.json`
 
 ## Seed Data
-- Generate deterministic demo assets and JSON data: `pnpm backend:seed`
+- Generate deterministic demo assets and Supabase records: `pnpm backend:seed`
 - Seed project: `default`
 - Seed commits: `c0001`, `c0002`, `c0003`
 - Seed reports: `r0001`, `r0002`
