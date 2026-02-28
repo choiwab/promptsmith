@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { ErrorState } from "../../components/ErrorState";
 import { LoadingState } from "../../components/LoadingState";
@@ -173,6 +173,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const [controls, setControls] = useState<EvalControlState>(() => readControls());
   const [focusedCard, setFocusedCard] = useState(0);
   const [expandedCardText, setExpandedCardText] = useState<Record<string, boolean>>({});
+  const lastPromptSeedCommitIdRef = useRef<string | undefined>(undefined);
 
   const canRun = useMemo(() => {
     return controls.basePrompt.trim().length >= 5 && requestStates.eval !== "loading";
@@ -338,16 +339,18 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   }, [controls]);
 
   useEffect(() => {
-    if (!promptSeedText) {
+    if (lastPromptSeedCommitIdRef.current === promptSeedCommitId) {
       return;
     }
-    setControls((prev) => {
-      if (prev.basePrompt.trim() === promptSeedText) {
-        return prev;
-      }
-      return { ...prev, basePrompt: promptSeedText };
-    });
-  }, [promptSeedText]);
+
+    lastPromptSeedCommitIdRef.current = promptSeedCommitId;
+    setControls((prev) => ({
+      ...prev,
+      basePrompt: promptSeedText
+    }));
+    setFocusedCard(0);
+    setExpandedCardText({});
+  }, [promptSeedCommitId, promptSeedText]);
 
   const applyPrompt = (prompt: string) => {
     const trimmed = prompt.trim();
