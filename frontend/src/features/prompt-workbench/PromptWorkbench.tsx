@@ -73,6 +73,9 @@ export const PromptWorkbench = () => {
           {selectedCommitId ? <strong> ({selectedCommitId})</strong> : " (none selected)"}
         </span>
       </label>
+      <p className="field-hint">
+        If no parent is selected, backend uses the latest commit in this project as generation context.
+      </p>
 
       <div className="panel__actions">
         <Button variant="primary" loading={requestStates.generate === "loading"} disabled={!canSubmit} onClick={onSubmit}>

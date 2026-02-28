@@ -7,6 +7,7 @@ import httpx
 from backend.app.core.config import Settings
 from backend.app.core.errors import ApiError, ErrorCode
 from backend.app.storage.repository import Repository
+from backend.app.storage.schemas import CommitRecord
 
 
 class GenerationService:
@@ -24,13 +25,14 @@ class GenerationService:
         parent_commit_id: str | None,
     ):
         self.repository.ensure_project(project_id)
-        if parent_commit_id:
-            self.repository.get_commit(parent_commit_id, project_id=project_id)
+        parent_commit = self._resolve_parent_commit(project_id=project_id, parent_commit_id=parent_commit_id)
+        effective_parent_commit_id = parent_commit.commit_id if parent_commit else None
         commit_id = self.repository.reserve_commit_id()
+        effective_prompt = self._with_parent_context(prompt=prompt, parent_commit=parent_commit)
 
         try:
             image_bytes = await self._generate_image_bytes(
-                prompt=prompt,
+                prompt=effective_prompt,
                 model=model,
                 seed=seed,
             )
@@ -45,7 +47,7 @@ class GenerationService:
                 prompt=prompt,
                 model=model,
                 seed=seed,
-                parent_commit_id=parent_commit_id,
+                parent_commit_id=effective_parent_commit_id,
                 image_paths=[supabase_image_url],
                 status="success",
                 error=None,
@@ -58,7 +60,7 @@ class GenerationService:
                 prompt=prompt,
                 model=model,
                 seed=seed,
-                parent_commit_id=parent_commit_id,
+                parent_commit_id=effective_parent_commit_id,
                 image_paths=[],
                 status="failed",
                 error=f"{api_error.code.value}: {api_error.message}",
@@ -71,7 +73,7 @@ class GenerationService:
                 prompt=prompt,
                 model=model,
                 seed=seed,
-                parent_commit_id=parent_commit_id,
+                parent_commit_id=effective_parent_commit_id,
                 image_paths=[],
                 status="failed",
                 error=f"{ErrorCode.OPENAI_UPSTREAM_ERROR.value}: {exc}",
@@ -81,6 +83,33 @@ class GenerationService:
                 "Image generation failed due to unexpected upstream response.",
                 status_code=502,
             ) from exc
+
+    def _resolve_parent_commit(self, *, project_id: str, parent_commit_id: str | None) -> CommitRecord | None:
+        if parent_commit_id:
+            return self.repository.get_commit(parent_commit_id, project_id=project_id)
+
+        history, _ = self.repository.list_history(project_id=project_id, limit=1, cursor=None)
+        if not history:
+            return None
+        return history[0]
+
+    def _with_parent_context(self, *, prompt: str, parent_commit: CommitRecord | None) -> str:
+        if parent_commit is None:
+            return prompt
+
+        parent_prompt = parent_commit.prompt.strip()
+        return "\n".join(
+            [
+                "Generate the next iteration in this prompt lineage.",
+                f"Previous commit id: {parent_commit.commit_id}",
+                f"Previous commit prompt: {parent_prompt}",
+                f"New prompt update: {prompt}",
+                (
+                    "Keep subject identity and core scene continuity from the previous commit "
+                    "unless the new prompt explicitly changes them."
+                ),
+            ]
+        )
 
     async def _generate_image_bytes(self, *, prompt: str, model: str, seed: str | None) -> bytes:
         if not self.settings.openai_api_key:

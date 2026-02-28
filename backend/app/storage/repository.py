@@ -15,6 +15,7 @@ from backend.app.storage.schemas import (
 )
 from backend.app.storage.supabase_mirror import SupabaseMirror
 
+
 def _model_validate(model_cls, payload):
     if hasattr(model_cls, "model_validate"):
         return model_cls.model_validate(payload)
@@ -40,12 +41,13 @@ class Repository:
 
     def reset_storage(self) -> None:
         with self._lock:
-            self.supabase_mirror.delete_all_records("comparisons", "report_id")
-            self.supabase_mirror.delete_all_records("commits", "commit_id")
-            self.supabase_mirror.delete_all_records("projects", "project_id")
+            self._safe_call("clear comparisons", self.supabase_mirror.delete_all_records, "comparisons", "report_id")
+            self._safe_call("clear commits", self.supabase_mirror.delete_all_records, "commits", "commit_id")
+            self._safe_call("clear projects", self.supabase_mirror.delete_all_records, "projects", "project_id")
 
     def list_projects(self) -> list[ProjectRecord]:
-        projects = [_model_validate(ProjectRecord, item) for item in self.supabase_mirror.list_projects()]
+        payload = self._safe_call("list projects", self.supabase_mirror.list_projects)
+        projects = [_model_validate(ProjectRecord, item) for item in payload]
         projects.sort(key=lambda item: item.updated_at, reverse=True)
         return projects
 
@@ -60,13 +62,15 @@ class Repository:
 
     def upsert_project(self, project_id: str, name: str | None = None) -> tuple[ProjectRecord, bool]:
         with self._lock:
-            existing_payload = self.supabase_mirror.get_project(project_id)
+            existing_payload = self._safe_call("fetch project", self.supabase_mirror.get_project, project_id)
             if existing_payload:
                 existing = _model_validate(ProjectRecord, existing_payload)
                 if name and name != existing.name:
                     existing.name = name
                     existing.updated_at = utc_now_iso()
-                    updated_payload = self.supabase_mirror.update_project(
+                    updated_payload = self._safe_call(
+                        "update project",
+                        self.supabase_mirror.update_project,
                         project_id,
                         {
                             "name": existing.name,
@@ -85,7 +89,7 @@ class Repository:
                 created_at=now,
                 updated_at=now,
             )
-            payload = self.supabase_mirror.insert_project(_model_dump(project))
+            payload = self._safe_call("insert project", self.supabase_mirror.insert_project, _model_dump(project))
             return _model_validate(ProjectRecord, payload), True
 
     def ensure_project(self, project_id: str, name: str | None = None) -> ProjectRecord:
@@ -93,7 +97,7 @@ class Repository:
         return project
 
     def get_project(self, project_id: str) -> ProjectRecord:
-        payload = self.supabase_mirror.get_project(project_id)
+        payload = self._safe_call("fetch project", self.supabase_mirror.get_project, project_id)
         if payload is None:
             raise ApiError(
                 ErrorCode.PROJECT_NOT_FOUND,
@@ -128,11 +132,11 @@ class Repository:
                 error=error,
                 created_at=utc_now_iso(),
             )
-            payload = self.supabase_mirror.insert_commit(_model_dump(commit))
+            payload = self._safe_call("insert commit", self.supabase_mirror.insert_commit, _model_dump(commit))
             return _model_validate(CommitRecord, payload)
 
     def get_commit(self, commit_id: str, project_id: str | None = None) -> CommitRecord:
-        payload = self.supabase_mirror.get_commit(commit_id)
+        payload = self._safe_call("fetch commit", self.supabase_mirror.get_commit, commit_id)
         if payload is None:
             raise ApiError(
                 ErrorCode.COMMIT_NOT_FOUND,
@@ -160,7 +164,9 @@ class Repository:
                 )
 
             now = utc_now_iso()
-            payload = self.supabase_mirror.update_project(
+            payload = self._safe_call(
+                "set project baseline",
+                self.supabase_mirror.update_project,
                 project_id,
                 {
                     "active_baseline_commit_id": commit_id,
@@ -177,7 +183,8 @@ class Repository:
 
     def list_history(self, project_id: str, limit: int, cursor: str | None) -> tuple[list[CommitRecord], str | None]:
         self.get_project(project_id)
-        commits = [self._parse_commit(item) for item in self.supabase_mirror.list_commits(project_id)]
+        payload = self._safe_call("list commits", self.supabase_mirror.list_commits, project_id)
+        commits = [self._parse_commit(item) for item in payload]
         commits.sort(key=lambda c: (c.created_at, c.commit_id), reverse=True)
 
         start_index = 0
@@ -193,11 +200,13 @@ class Repository:
 
     def create_comparison_report(self, report: ComparisonReportRecord) -> ComparisonReportRecord:
         with self._lock:
-            payload = self.supabase_mirror.insert_comparison(_model_dump(report))
+            payload = self._safe_call("insert comparison", self.supabase_mirror.insert_comparison, _model_dump(report))
             return _model_validate(ComparisonReportRecord, payload)
 
     def upload_commit_image(self, *, commit_id: str, filename: str, payload: bytes) -> str:
-        return self.supabase_mirror.upload_commit_image(
+        return self._safe_call(
+            "upload commit image",
+            self.supabase_mirror.upload_commit_image,
             commit_id=commit_id,
             filename=filename,
             payload=payload,
@@ -205,3 +214,15 @@ class Repository:
 
     def _parse_commit(self, payload: dict) -> CommitRecord:
         return _model_validate(CommitRecord, payload)
+
+    def _safe_call(self, operation: str, fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ApiError:
+            raise
+        except Exception as exc:
+            raise ApiError(
+                ErrorCode.STORAGE_WRITE_FAILED,
+                f"Failed to {operation}: {exc}",
+                status_code=500,
+            ) from exc

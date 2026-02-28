@@ -59,8 +59,7 @@ def main() -> None:
     repository.ensure_project(project_id)
 
     commit_ids: list[str] = []
-    for variant in [1, 2, 3]:
-        commit_id = repository.reserve_commit_id()
+    for variant, commit_id in enumerate(["c0001", "c0002", "c0003"], start=1):
         parent_commit_id = commit_ids[-1] if commit_ids else None
         commit_ids.append(commit_id)
 
@@ -116,8 +115,8 @@ def main() -> None:
         },
     ]
 
-    for spec in compare_specs:
-        report_id = repository.reserve_report_id()
+    for index, spec in enumerate(compare_specs, start=1):
+        report_id = f"r{index:04d}"
         artifact_dir = settings.app_artifact_dir / report_id
         candidate_image = settings.app_image_dir / spec["candidate_id"] / "img_01.png"
 
