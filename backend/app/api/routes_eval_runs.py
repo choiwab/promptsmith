@@ -20,7 +20,7 @@ class CreateEvalRunRequest(BaseModel):
     base_prompt: str = Field(min_length=5)
     objective_preset: Literal["adherence", "aesthetic", "product"] = "adherence"
     image_model: str = Field(default="gpt-image-1-mini", min_length=1)
-    n_variants: int = Field(default=6, ge=4, le=8)
+    n_variants: int = Field(default=3, ge=2, le=3)
     quality: Literal["low", "medium", "high"] = "medium"
     parent_commit_id: str | None = None
     constraints: EvalConstraints = Field(default_factory=EvalConstraints)

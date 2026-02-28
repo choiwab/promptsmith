@@ -9,7 +9,7 @@ import type { CreateEvalRunRequest, ObjectivePreset } from "../../api/types";
 interface EvalControlState {
   basePrompt: string;
   objectivePreset: ObjectivePreset;
-  variantCount: 4 | 6 | 8;
+  variantCount: 2 | 3;
 }
 
 const STORAGE_KEY = "promptsmith.eval.controls.v1";
@@ -19,7 +19,7 @@ const DEFAULT_QUALITY = "medium" as const;
 const defaultControls: EvalControlState = {
   basePrompt: "",
   objectivePreset: "adherence",
-  variantCount: 6
+  variantCount: 3
 };
 
 const stageMessages: Record<string, string> = {
@@ -47,7 +47,7 @@ const readControls = (): EvalControlState => {
     return {
       ...defaultControls,
       ...parsed,
-      variantCount: parsed.variantCount === 4 || parsed.variantCount === 8 ? parsed.variantCount : 6,
+      variantCount: parsed.variantCount === 2 || parsed.variantCount === 3 ? parsed.variantCount : 3,
       objectivePreset: parsed.objectivePreset === "aesthetic" || parsed.objectivePreset === "product" ? parsed.objectivePreset : "adherence"
     };
   } catch {
@@ -229,12 +229,12 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         <div className="eval-segment">
           <span className="eval-segment__label">Variants</span>
           <div className="eval-segment__actions">
-            {[4, 6, 8].map((value) => (
+            {[2, 3].map((value) => (
               <button
                 key={value}
                 type="button"
                 className={`eval-chip-btn${controls.variantCount === value ? " eval-chip-btn--active" : ""}`}
-                onClick={() => setControls((prev) => ({ ...prev, variantCount: value as 4 | 6 | 8 }))}
+                onClick={() => setControls((prev) => ({ ...prev, variantCount: value as 2 | 3 }))}
                 aria-pressed={controls.variantCount === value}
               >
                 {value}
