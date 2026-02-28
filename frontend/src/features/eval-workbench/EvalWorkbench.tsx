@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/Button";
 import { ErrorState } from "../../components/ErrorState";
 import { LoadingState } from "../../components/LoadingState";
-import { useEvalRun, useLastError, useProjectId, useRequestStates } from "../../state/selectors";
+import { useEvalRun, useHistory, useLastError, useProjectId, useRequestStates, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 import type { CreateEvalRunRequest, EvalVariant, ObjectivePreset } from "../../api/types";
 
@@ -165,6 +165,8 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const requestStates = useRequestStates();
   const evalRun = useEvalRun();
   const lastError = useLastError();
+  const history = useHistory();
+  const selectedCommitId = useSelectedCommitId();
   const runEvalPipeline = useAppStore((state) => state.runEvalPipeline);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
@@ -193,6 +195,13 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const branchTargetCommitId = controls.followWinnerBranch
     ? winnerBranchDecision.parentCommitId
     : anchorParentCommitId;
+
+  const promptSeedCommitId = anchorCommitId || selectedCommitId;
+  const promptSeedCommit = useMemo(
+    () => (promptSeedCommitId ? history.find((item) => item.commit_id === promptSeedCommitId) : undefined),
+    [history, promptSeedCommitId]
+  );
+  const promptSeedText = promptSeedCommit?.prompt?.trim() || "";
 
   const processNotes = useMemo(() => {
     const notes: string[] = [];
@@ -328,6 +337,18 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(controls));
   }, [controls]);
 
+  useEffect(() => {
+    if (!promptSeedText) {
+      return;
+    }
+    setControls((prev) => {
+      if (prev.basePrompt.trim() === promptSeedText) {
+        return prev;
+      }
+      return { ...prev, basePrompt: promptSeedText };
+    });
+  }, [promptSeedText]);
+
   const applyPrompt = (prompt: string) => {
     const trimmed = prompt.trim();
     if (!trimmed) {
@@ -416,6 +437,11 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         placeholder="cinematic portrait of an astronaut chef in a neon diner"
       />
       <p className="field-hint">Pro tip: press Cmd/Ctrl + Enter to run.</p>
+      {promptSeedCommitId && promptSeedText ? (
+        <p className="field-hint">
+          Seeded from selected node <strong>{promptSeedCommitId}</strong>. You can edit before running.
+        </p>
+      ) : null}
 
       <div className="eval-controls">
         <div className="eval-segment">
