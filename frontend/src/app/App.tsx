@@ -24,8 +24,6 @@ import {
 } from "../state/selectors";
 import { useAppStore } from "../state/store";
 
-const appName = import.meta.env.VITE_APP_NAME || "Promptsmith";
-
 const countDescendants = (historyCommitIds: { commit_id: string; parent_commit_id?: string }[], commitId: string): number => {
   const childrenByParent = new Map<string, string[]>();
   for (const item of historyCommitIds) {
@@ -52,6 +50,7 @@ const countDescendants = (historyCommitIds: { commit_id: string; parent_commit_i
 };
 
 export const App = () => {
+  const appLogoSrc = `${import.meta.env.BASE_URL}img_01.png`;
   const fetchHistory = useAppStore((state) => state.fetchHistory);
   const refreshProjects = useAppStore((state) => state.refreshProjects);
   const retryLastOperation = useAppStore((state) => state.retryLastOperation);
@@ -119,9 +118,8 @@ export const App = () => {
             <button className="app-header__menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open project sidebar">
               &#9776;
             </button>
-            <span className="app-header__repo">repo</span>
+            <img src={appLogoSrc} alt="App logo" className="app-header__logo" />
             <div>
-              <h1>{appName}</h1>
               <p>Prompt history and lineage-driven generation workflows.</p>
             </div>
           </div>

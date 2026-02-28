@@ -875,7 +875,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
-  background: #fff;
+  background: var(--bg-panel);
   display: grid;
   gap: var(--space-3);
 }
@@ -917,20 +917,20 @@
 }
 
 .eval-guide__step--done {
-  border-color: #9dd6a9;
+  border-color: rgba(63, 185, 80, 0.3);
   background: var(--success-soft);
 }
 
 .eval-guide__step--active {
-  border-color: #85b8f4;
-  background: #eef6ff;
+  border-color: rgba(139, 92, 246, 0.3);
+  background: var(--accent-soft);
 }
 
 .eval-next-action {
   margin-top: var(--space-3);
-  border: 1px solid #85b8f4;
+  border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: var(--radius-sm);
-  background: #eef6ff;
+  background: var(--accent-soft);
   padding: var(--space-3);
 }
 
@@ -1030,7 +1030,7 @@
 .eval-process__summary-pill {
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg-panel);
   font-size: 0.73rem;
   font-weight: 700;
   text-transform: uppercase;
