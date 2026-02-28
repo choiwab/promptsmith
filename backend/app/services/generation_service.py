@@ -83,15 +83,24 @@ class GenerationService:
                 status_code=502,
             )
 
+        selected_model = model or self.settings.openai_image_model
+        model_name = selected_model.lower()
+        is_gpt_image = model_name.startswith("gpt-image")
+
         payload: dict[str, str | int] = {
-            "model": model or self.settings.openai_image_model,
+            "model": selected_model,
             "prompt": prompt,
             "size": "1024x1024",
             "n": 1,
-            "response_format": "b64_json",
         }
-        if seed:
-            payload["seed"] = seed
+        # `response_format` is only documented for DALL-E image generations.
+        # GPT Image responses include base64 image content by default.
+        if not is_gpt_image:
+            payload["response_format"] = "b64_json"
+
+        # Preserve seed in commit metadata, but do not send it upstream:
+        # current image-generation docs do not define a stable `seed` request field.
+        _ = seed
 
         headers = {
             "Authorization": f"Bearer {self.settings.openai_api_key}",
@@ -125,9 +134,22 @@ class GenerationService:
                 status_code=502,
             )
         if response.status_code >= 400:
+            upstream_message = None
+            try:
+                body = response.json()
+                if isinstance(body, dict):
+                    error_obj = body.get("error")
+                    if isinstance(error_obj, dict):
+                        message = error_obj.get("message")
+                        if isinstance(message, str) and message:
+                            upstream_message = message
+            except Exception:
+                upstream_message = None
+
+            detail = f": {upstream_message}" if upstream_message else ""
             raise ApiError(
                 ErrorCode.OPENAI_UPSTREAM_ERROR,
-                f"Image generation request failed ({response.status_code}).",
+                f"Image generation request failed ({response.status_code}){detail}",
                 status_code=502,
             )
 

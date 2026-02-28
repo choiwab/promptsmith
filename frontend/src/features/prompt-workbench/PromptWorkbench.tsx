@@ -5,18 +5,20 @@ import { useRequestStates } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 
 export const PromptWorkbench = () => {
+  const minPromptLength = 5;
   const [prompt, setPrompt] = useState("");
   const [seed, setSeed] = useState("");
   const generateCommit = useAppStore((state) => state.generateCommit);
   const requestStates = useRequestStates();
+  const promptLength = prompt.trim().length;
 
   const canSubmit = useMemo(() => {
-    return prompt.trim().length > 0 && requestStates.generate !== "loading";
-  }, [prompt, requestStates.generate]);
+    return promptLength >= minPromptLength && requestStates.generate !== "loading";
+  }, [promptLength, minPromptLength, requestStates.generate]);
 
   const onSubmit = async () => {
     const trimmed = prompt.trim();
-    if (!trimmed) {
+    if (trimmed.length < minPromptLength) {
       return;
     }
 
@@ -42,6 +44,7 @@ export const PromptWorkbench = () => {
         onChange={(event) => setPrompt(event.target.value)}
         placeholder="cinematic portrait of hero character in studio lighting"
       />
+      <p className="field-hint">Use at least {minPromptLength} characters.</p>
 
       <label htmlFor="seed-input" className="field-label">
         Seed (optional)
