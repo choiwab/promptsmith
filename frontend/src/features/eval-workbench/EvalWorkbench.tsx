@@ -29,7 +29,7 @@ const stageMessages: Record<string, string> = {
   planning: "Planning variants...",
   generating: "Generating images...",
   evaluating: "Scoring generated images...",
-  refining: "Drafting prompt suggestions...",
+  refining: "Finalizing eval outputs...",
   completed: "Eval completed.",
   completed_degraded: "Eval completed in degraded mode.",
   failed: "Eval failed."
@@ -103,7 +103,6 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     return controls.basePrompt.trim().length >= 5 && requestStates.eval !== "loading";
   }, [controls.basePrompt, requestStates.eval]);
 
-  const suggestions = evalRun?.suggestions;
   const leaderboard = evalRun?.leaderboard ?? [];
   const topVariant = leaderboard[0];
   const variants = useMemo(() => {
@@ -141,10 +140,10 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       notes.push("Fallback mode is active because at least one upstream generation or evaluation step failed.");
     }
     if (evalRun.stage === "refining") {
-      notes.push("Agent is synthesizing conservative, balanced, and aggressive next prompts.");
+      notes.push("Agent is finishing the final refinement step.");
     }
     if (evalRun.stage === "completed" || evalRun.stage === "completed_degraded") {
-      notes.push("Run finalized. You can branch from the winner or apply a suggestion directly.");
+      notes.push("Run finalized. You can branch from the winner and run again.");
     }
     return notes;
   }, [controls.followWinnerBranch, controls.variantCount, evalRun, topVariant]);
@@ -215,7 +214,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         return stepState;
       }
 
-      stepState.refining = suggestions?.balanced?.prompt_text ? "done" : "active";
+      stepState.refining = "active";
       return stepState;
     }
 
@@ -238,7 +237,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       }
     }
     return stepState;
-  }, [evalRun, suggestions?.balanced?.prompt_text]);
+  }, [evalRun]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -303,16 +302,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         return;
       }
 
-      if (event.key === "1" && suggestions?.conservative?.prompt_text) {
-        event.preventDefault();
-        applyPrompt(suggestions.conservative.prompt_text);
-      } else if (event.key === "2" && suggestions?.balanced?.prompt_text) {
-        event.preventDefault();
-        applyPrompt(suggestions.balanced.prompt_text);
-      } else if (event.key === "3" && suggestions?.aggressive?.prompt_text) {
-        event.preventDefault();
-        applyPrompt(suggestions.aggressive.prompt_text);
-      } else if (event.key === "ArrowRight" && leaderboard.length > 0) {
+      if (event.key === "ArrowRight" && leaderboard.length > 0) {
         event.preventDefault();
         setFocusedCard((prev) => Math.min(prev + 1, leaderboard.length - 1));
       } else if (event.key === "ArrowLeft" && leaderboard.length > 0) {
@@ -323,7 +313,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canRun, leaderboard.length, suggestions]);
+  }, [canRun, leaderboard.length]);
 
   return (
     <section className="panel panel--eval">
@@ -343,7 +333,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         onChange={(event) => setControls((prev) => ({ ...prev, basePrompt: event.target.value }))}
         placeholder="cinematic portrait of an astronaut chef in a neon diner"
       />
-      <p className="field-hint">Pro tip: press Cmd/Ctrl + Enter to run. Keys 1/2/3 apply suggestions.</p>
+      <p className="field-hint">Pro tip: press Cmd/Ctrl + Enter to run.</p>
 
       <div className="eval-controls">
         <div className="eval-segment">
@@ -579,47 +569,10 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         </section>
       ) : null}
 
-      {suggestions ? (
-        <section className="eval-suggestions">
-          {(["conservative", "balanced", "aggressive"] as const).map((kind) => (
-            <article key={kind} className="eval-suggestion">
-              <header>
-                <h4>{kind}</h4>
-              </header>
-              <p>{suggestions[kind].prompt_text}</p>
-              <p className="field-hint">{suggestions[kind].rationale}</p>
-              <div className="eval-suggestion__actions">
-                <Button variant="ghost" onClick={() => applyPrompt(suggestions[kind].prompt_text)}>
-                  Use as Prompt
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    void runEval({
-                      promptOverride: suggestions[kind].prompt_text,
-                      useBranchParent: true
-                    })
-                  }
-                >
-                  Run Now
-                </Button>
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
-
       {topVariant ? (
         <div className="eval-sticky-actions">
           <Button variant="secondary" onClick={() => applyPrompt(topVariant.variant_prompt)}>
             Use Winner as Next Prompt
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={!suggestions?.balanced?.prompt_text}
-            onClick={() => applyPrompt(suggestions?.balanced?.prompt_text ?? "")}
-          >
-            Try Balanced Suggestion
           </Button>
           <Button variant="primary" disabled={!canRun} onClick={() => void runEval({ useBranchParent: true })}>
             Re-run Same Settings

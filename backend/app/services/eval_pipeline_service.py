@@ -261,11 +261,13 @@ class EvalPipelineService:
             self._update_run(run_id, {"leaderboard": leaderboard, "top_k": top_k})
 
             self._set_stage(run_id, "refining")
-            suggestions = await self._generate_suggestions(
-                base_prompt=run["base_prompt"],
-                objective_preset=run["objective_preset"],
-                leaderboard=leaderboard,
-            )
+            # Suggestion variants are intentionally disabled in the current UX.
+            # Keep the response shape stable with empty placeholders.
+            suggestions = {
+                "conservative": {"prompt_text": "", "rationale": ""},
+                "balanced": {"prompt_text": "", "rationale": ""},
+                "aggressive": {"prompt_text": "", "rationale": ""},
+            }
             self._update_run(run_id, {"suggestions": suggestions})
 
             finalized = self.get_run(run_id)
