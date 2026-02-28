@@ -74,7 +74,7 @@ export const PromptWorkbench = () => {
         </span>
       </label>
       <p className="field-hint">
-        If no parent is selected, backend uses the latest commit in this project as generation context.
+        If no parent is selected, backend uses the latest successful commit image + prompt as generation context.
       </p>
 
       <div className="panel__actions">

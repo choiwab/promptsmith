@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 
 import httpx
 
@@ -29,12 +30,14 @@ class GenerationService:
         effective_parent_commit_id = parent_commit.commit_id if parent_commit else None
         commit_id = self.repository.reserve_commit_id()
         effective_prompt = self._with_parent_context(prompt=prompt, parent_commit=parent_commit)
+        parent_image_bytes = await self._resolve_parent_image_bytes(parent_commit)
 
         try:
             image_bytes = await self._generate_image_bytes(
                 prompt=effective_prompt,
                 model=model,
                 seed=seed,
+                parent_image_bytes=parent_image_bytes,
             )
             supabase_image_url = self.repository.upload_commit_image(
                 commit_id=commit_id,
@@ -86,12 +89,31 @@ class GenerationService:
 
     def _resolve_parent_commit(self, *, project_id: str, parent_commit_id: str | None) -> CommitRecord | None:
         if parent_commit_id:
-            return self.repository.get_commit(parent_commit_id, project_id=project_id)
+            parent_commit = self.repository.get_commit(parent_commit_id, project_id=project_id)
+            self._validate_parent_commit(parent_commit)
+            return parent_commit
 
-        history, _ = self.repository.list_history(project_id=project_id, limit=1, cursor=None)
-        if not history:
-            return None
-        return history[0]
+        history, _ = self.repository.list_history(project_id=project_id, limit=100, cursor=None)
+        for commit in history:
+            if self._is_usable_parent_commit(commit):
+                return commit
+        return None
+
+    def _validate_parent_commit(self, parent_commit: CommitRecord) -> None:
+        if self._is_usable_parent_commit(parent_commit):
+            return
+
+        raise ApiError(
+            ErrorCode.COMMIT_NOT_FOUND,
+            (
+                f"Commit '{parent_commit.commit_id}' is not a successful generation with "
+                "an image artifact."
+            ),
+            status_code=404,
+        )
+
+    def _is_usable_parent_commit(self, commit: CommitRecord) -> bool:
+        return commit.status == "success" and self._first_image_path(commit) is not None
 
     def _with_parent_context(self, *, prompt: str, parent_commit: CommitRecord | None) -> str:
         if parent_commit is None:
@@ -111,7 +133,93 @@ class GenerationService:
             ]
         )
 
-    async def _generate_image_bytes(self, *, prompt: str, model: str, seed: str | None) -> bytes:
+    async def _resolve_parent_image_bytes(self, parent_commit: CommitRecord | None) -> bytes | None:
+        if parent_commit is None:
+            return None
+
+        image_ref = self._first_image_path(parent_commit)
+        if image_ref is None:
+            return None
+
+        if self._is_http_url(image_ref):
+            return await self._download_image_bytes(image_ref)
+
+        local_path = self._resolve_local_image_path(image_ref)
+        if local_path is not None:
+            try:
+                return local_path.read_bytes()
+            except OSError as exc:
+                raise ApiError(
+                    ErrorCode.OPENAI_UPSTREAM_ERROR,
+                    f"Failed to read parent image artifact: {exc}",
+                    status_code=502,
+                ) from exc
+
+        remote_url = self._resolve_remote_image_url(image_ref)
+        if remote_url is not None:
+            return await self._download_image_bytes(remote_url)
+
+        raise ApiError(
+            ErrorCode.OPENAI_UPSTREAM_ERROR,
+            f"Unable to resolve parent image reference '{image_ref}'.",
+            status_code=502,
+        )
+
+    def _first_image_path(self, commit: CommitRecord) -> str | None:
+        for image_path in commit.image_paths:
+            if isinstance(image_path, str) and image_path:
+                return image_path
+        return None
+
+    def _is_http_url(self, value: str) -> bool:
+        return value.startswith("http://") or value.startswith("https://")
+
+    def _resolve_local_image_path(self, image_ref: str) -> Path | None:
+        cleaned = image_ref.strip()
+        if not cleaned:
+            return None
+
+        candidates: list[Path] = []
+        raw_path = Path(cleaned)
+        if raw_path.is_absolute():
+            candidates.append(raw_path)
+        else:
+            candidates.append((Path.cwd() / raw_path).resolve())
+            candidates.append((self.settings.app_image_dir / raw_path).resolve())
+
+        normalized = cleaned.lstrip("/")
+        if normalized.startswith("images/"):
+            nested = normalized.split("/", 1)[1]
+            candidates.append((self.settings.app_image_dir / nested).resolve())
+
+        seen: set[Path] = set()
+        for path in candidates:
+            if path in seen:
+                continue
+            seen.add(path)
+            if path.exists() and path.is_file():
+                return path
+        return None
+
+    def _resolve_remote_image_url(self, image_ref: str) -> str | None:
+        cleaned = image_ref.strip()
+        if not cleaned:
+            return None
+
+        if cleaned.startswith("/storage/v1/") or cleaned.startswith("storage/v1/"):
+            if self.settings.supabase_url:
+                return f"{self.settings.supabase_url.rstrip('/')}/{cleaned.lstrip('/')}"
+
+        return None
+
+    async def _generate_image_bytes(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        seed: str | None,
+        parent_image_bytes: bytes | None,
+    ) -> bytes:
         if not self.settings.openai_api_key:
             raise ApiError(
                 ErrorCode.OPENAI_UPSTREAM_ERROR,
@@ -145,11 +253,26 @@ class GenerationService:
 
         try:
             async with httpx.AsyncClient(timeout=self.settings.openai_timeout_seconds) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/images/generations",
-                    json=payload,
-                    headers=headers,
-                )
+                if parent_image_bytes is None:
+                    response = await client.post(
+                        "https://api.openai.com/v1/images/generations",
+                        json=payload,
+                        headers=headers,
+                    )
+                else:
+                    response = await client.post(
+                        "https://api.openai.com/v1/images/edits",
+                        data={
+                            "model": selected_model,
+                            "prompt": prompt,
+                            "size": "1024x1024",
+                            "n": "1",
+                        },
+                        files={
+                            "image": ("parent.png", parent_image_bytes, "image/png"),
+                        },
+                        headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
+                    )
         except httpx.TimeoutException as exc:
             raise ApiError(
                 ErrorCode.OPENAI_TIMEOUT,
@@ -228,6 +351,6 @@ class GenerationService:
         except httpx.HTTPError as exc:
             raise ApiError(
                 ErrorCode.OPENAI_UPSTREAM_ERROR,
-                f"Failed to download generated image: {exc}",
+                f"Failed to download image artifact: {exc}",
                 status_code=502,
             ) from exc
