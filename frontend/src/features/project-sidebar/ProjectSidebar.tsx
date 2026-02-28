@@ -24,7 +24,6 @@ export const ProjectSidebar = ({ mobileOpen, onMobileClose }: ProjectSidebarProp
   const projectId = useProjectId();
   const requestStates = useRequestStates();
   const setProject = useAppStore((state) => state.setProject);
-  const refreshProjects = useAppStore((state) => state.refreshProjects);
 
   const [collapsed, setCollapsed] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -38,7 +37,6 @@ export const ProjectSidebar = ({ mobileOpen, onMobileClose }: ProjectSidebarProp
     setNewProjectId("");
     setNewProjectName("");
     setShowCreateForm(false);
-    await refreshProjects();
   };
 
   const handleSelect = (id: string) => {
@@ -141,16 +139,6 @@ export const ProjectSidebar = ({ mobileOpen, onMobileClose }: ProjectSidebarProp
             )}
           </ul>
         </nav>
-
-        <div className="sidebar__footer">
-          <Button
-            variant="ghost"
-            onClick={() => void refreshProjects()}
-            disabled={requestStates.project === "loading"}
-          >
-            Refresh
-          </Button>
-        </div>
       </aside>
     </>
   );
