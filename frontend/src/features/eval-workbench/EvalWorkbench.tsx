@@ -10,7 +10,11 @@ interface EvalControlState {
   basePrompt: string;
   objectivePreset: ObjectivePreset;
   variantCount: 2 | 3;
-  followWinnerBranch: boolean;
+}
+
+interface OptionCopy {
+  label: string;
+  description: string;
 }
 
 const STORAGE_KEY = "promptsmith.eval.controls.v1";
@@ -20,8 +24,22 @@ const DEFAULT_QUALITY = "medium" as const;
 const defaultControls: EvalControlState = {
   basePrompt: "",
   objectivePreset: "adherence",
-  variantCount: 3,
-  followWinnerBranch: true
+  variantCount: 3
+};
+
+const objectiveCopy: Record<ObjectivePreset, OptionCopy> = {
+  adherence: {
+    label: "Follow Prompt Closely",
+    description: "Best when you need strict prompt compliance and consistent subject details."
+  },
+  aesthetic: {
+    label: "Max Visual Quality",
+    description: "Best when visual style, polish, and composition quality matter most."
+  },
+  product: {
+    label: "Product/Marketing Ready",
+    description: "Best when clarity, sellability, and commercial readiness are the priority."
+  }
 };
 
 const stageMessages: Record<string, string> = {
@@ -42,7 +60,7 @@ const pipelineStepLabel: Record<PipelineStep, string> = {
   planning: "Plan variants",
   generating: "Generate images",
   evaluating: "Score and judge",
-  refining: "Draft next prompts"
+  refining: "Finalize outputs"
 };
 
 const pipelineStepOrder: Record<PipelineStep, number> = {
@@ -146,7 +164,6 @@ const readControls = (): EvalControlState => {
       ...defaultControls,
       ...parsed,
       variantCount: parsed.variantCount === 2 || parsed.variantCount === 3 ? parsed.variantCount : 3,
-      followWinnerBranch: typeof parsed.followWinnerBranch === "boolean" ? parsed.followWinnerBranch : true,
       objectivePreset: parsed.objectivePreset === "aesthetic" || parsed.objectivePreset === "product" ? parsed.objectivePreset : "adherence"
     };
   } catch {
@@ -173,6 +190,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
   const [controls, setControls] = useState<EvalControlState>(() => readControls());
   const [focusedCard, setFocusedCard] = useState(0);
   const [expandedCardText, setExpandedCardText] = useState<Record<string, boolean>>({});
+  const [processExpanded, setProcessExpanded] = useState(false);
 
   const canRun = useMemo(() => {
     return controls.basePrompt.trim().length >= 5 && requestStates.eval !== "loading";
@@ -192,9 +210,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     [anchorParentCommitId, leaderboard]
   );
 
-  const branchTargetCommitId = controls.followWinnerBranch
-    ? winnerBranchDecision.parentCommitId
-    : anchorParentCommitId;
+  const branchTargetCommitId = winnerBranchDecision.parentCommitId;
 
   const promptSeedCommitId = anchorCommitId || selectedCommitId;
   const promptSeedCommit = useMemo(
@@ -202,16 +218,56 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     [history, promptSeedCommitId]
   );
   const promptSeedText = promptSeedCommit?.prompt?.trim() || "";
+  const promptIsSeeded = Boolean(promptSeedText) && controls.basePrompt.trim() === promptSeedText;
+  const promptReady = controls.basePrompt.trim().length >= 5;
+  const runCompleted = Boolean(evalRun && (evalRun.stage === "completed" || evalRun.stage === "completed_degraded"));
+  const activePlanParent = branchTargetCommitId ?? "new anchor";
+  const branchModeDetail = "Follow stable winner (only if confidence and score gap are strong).";
+
+  const guideSteps = useMemo(() => {
+    const steps: { title: string; detail: string; state: "pending" | "active" | "done" }[] = [];
+    steps.push({
+      title: "Choose a start node",
+      detail: promptSeedCommitId
+        ? `Using ${promptSeedCommitId} as the starting context.`
+        : "No node selected. This run will start from a new anchor.",
+      state: "done"
+    });
+    steps.push({
+      title: "Set the base prompt",
+      detail: promptReady ? "Prompt is ready for eval." : "Enter at least 5 characters.",
+      state: promptReady ? "done" : "active"
+    });
+    steps.push({
+      title: "Pick branch mode",
+      detail: branchModeDetail,
+      state: "done"
+    });
+    steps.push({
+      title: "Run an eval round",
+      detail: evalRun ? `Current stage: ${humanizeStatus(evalRun.stage)}.` : "Press Run Eval Round to generate and rank variants.",
+      state: runCompleted ? "done" : promptReady ? "active" : "pending"
+    });
+    steps.push({
+      title: "Iterate from results",
+      detail:
+        runCompleted && topVariant
+          ? `Winner is ${topVariant.variant_id}. Click "Use Winner as Next Prompt", then run again.`
+          : "After completion, apply the winner prompt and run the next round.",
+      state: runCompleted ? "active" : "pending"
+    });
+    return steps;
+  }, [branchModeDetail, evalRun, promptReady, promptSeedCommitId, runCompleted, topVariant]);
+
+  const nextAction = useMemo(() => {
+    return guideSteps.find((step) => step.state === "active") ?? guideSteps.find((step) => step.state === "pending");
+  }, [guideSteps]);
 
   const processNotes = useMemo(() => {
     const notes: string[] = [];
     if (!evalRun) {
       notes.push(`Ready to run ${controls.variantCount} variants.`);
-      notes.push(
-        controls.followWinnerBranch
-          ? "Branch strategy is set to follow the winner only when it passes stability checks."
-          : "Branch strategy is set to stay pinned to the selected anchor."
-      );
+      notes.push("Branch strategy is set to follow the winner only when it passes stability checks.");
       return notes;
     }
 
@@ -219,14 +275,12 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       `Progress: generated ${evalRun.progress.generated_variants}/${evalRun.progress.total_variants}, evaluated ${evalRun.progress.evaluated_variants}/${evalRun.progress.total_variants}.`
     );
     if (evalRun.variants.length > 0) {
-      notes.push(`Planner produced ${evalRun.variants.length} variants for objective ${evalRun.objective_preset}.`);
+      notes.push(`Planner produced ${evalRun.variants.length} variants with objective "${objectiveCopy[evalRun.objective_preset].label}".`);
     }
     if (topVariant) {
       notes.push(`Current leader is ${topVariant.variant_id} at score ${topVariant.composite_score.toFixed(3)}.`);
     }
-    if (controls.followWinnerBranch) {
-      notes.push(`Branch gate: ${winnerBranchDecision.reason}`);
-    }
+    notes.push(`Branch gate: ${winnerBranchDecision.reason}`);
     if (evalRun.degraded) {
       notes.push("Fallback mode is active because at least one upstream generation or evaluation step failed.");
     }
@@ -237,7 +291,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       notes.push("Run finalized. You can branch from the winner and run again.");
     }
     return notes;
-  }, [controls.followWinnerBranch, controls.variantCount, evalRun, topVariant, winnerBranchDecision.reason]);
+  }, [controls.variantCount, evalRun, topVariant, winnerBranchDecision.reason]);
 
   const progressPercent = useMemo(() => {
     if (!evalRun) {
@@ -357,17 +411,13 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     setControls((prev) => ({ ...prev, basePrompt: trimmed }));
   };
 
-  const runEval = async (options?: { promptOverride?: string; useBranchParent?: boolean }) => {
+  const runEval = async (options?: { promptOverride?: string }) => {
     const prompt = (options?.promptOverride ?? controls.basePrompt).trim();
     if (prompt.length < 5) {
       return;
     }
 
-    const useBranchParent = options?.useBranchParent ?? controls.followWinnerBranch;
-    const lineageParentCommitId =
-      useBranchParent
-        ? winnerBranchDecision.parentCommitId || undefined
-        : anchorParentCommitId || undefined;
+    const lineageParentCommitId = winnerBranchDecision.parentCommitId || undefined;
 
     const payload: CreateEvalRunRequest = {
       project_id: projectId,
@@ -418,6 +468,12 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canRun, leaderboard.length]);
 
+  useEffect(() => {
+    if (requestStates.eval === "loading") {
+      setProcessExpanded(true);
+    }
+  }, [requestStates.eval]);
+
   return (
     <section className="panel panel--eval">
       <header className="panel__header">
@@ -438,24 +494,36 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
       />
       <p className="field-hint">Pro tip: press Cmd/Ctrl + Enter to run.</p>
       {promptSeedCommitId && promptSeedText ? (
-        <p className="field-hint">
-          Seeded from selected node <strong>{promptSeedCommitId}</strong>. You can edit before running.
-        </p>
+        <div className="eval-seed-row">
+          <p className="field-hint">
+            Seeded from selected node <strong>{promptSeedCommitId}</strong>. You can edit before running.
+          </p>
+          {!promptIsSeeded ? (
+            <button
+              type="button"
+              className="eval-inline-btn"
+              onClick={() => setControls((prev) => ({ ...prev, basePrompt: promptSeedText }))}
+            >
+              Reset to node prompt
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="eval-controls">
         <div className="eval-segment">
           <span className="eval-segment__label">Objective</span>
-          <div className="eval-segment__actions">
+          <div className="eval-option-grid">
             {(["adherence", "aesthetic", "product"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
-                className={`eval-chip-btn${controls.objectivePreset === value ? " eval-chip-btn--active" : ""}`}
+                className={`eval-option-btn${controls.objectivePreset === value ? " eval-option-btn--active" : ""}`}
                 onClick={() => setControls((prev) => ({ ...prev, objectivePreset: value }))}
                 aria-pressed={controls.objectivePreset === value}
               >
-                {value}
+                <strong>{objectiveCopy[value].label}</strong>
+                <span>{objectiveCopy[value].description}</span>
               </button>
             ))}
           </div>
@@ -480,30 +548,37 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
 
         <div className="eval-segment">
           <span className="eval-segment__label">Branching</span>
-          <div className="eval-segment__actions">
-            <button
-              type="button"
-              className={`eval-chip-btn${!controls.followWinnerBranch ? " eval-chip-btn--active" : ""}`}
-              onClick={() => setControls((prev) => ({ ...prev, followWinnerBranch: false }))}
-              aria-pressed={!controls.followWinnerBranch}
-            >
-              Stay on anchor
-            </button>
-            <button
-              type="button"
-              className={`eval-chip-btn${controls.followWinnerBranch ? " eval-chip-btn--active" : ""}`}
-              onClick={() => setControls((prev) => ({ ...prev, followWinnerBranch: true }))}
-              aria-pressed={controls.followWinnerBranch}
-            >
-              Follow stable winner
-            </button>
-          </div>
+          <p className="field-hint">
+            Mode: <strong>Follow stable winner</strong> (automatic)
+          </p>
           <p className="field-hint">
             Parent target: <strong>{branchTargetCommitId ?? "new anchor will be created"}</strong>
           </p>
-          {controls.followWinnerBranch ? <p className="field-hint">Decision: {winnerBranchDecision.reason}</p> : null}
+          <p className="field-hint">Decision: {winnerBranchDecision.reason}</p>
         </div>
       </div>
+
+      <section className="eval-guide" aria-label="Eval workflow guide">
+        <header className="eval-guide__header">
+          <h3>What Happens Next</h3>
+          <p>This run will evaluate {controls.variantCount} variants from <strong>{activePlanParent}</strong>.</p>
+        </header>
+        <ol className="eval-guide__steps">
+          {guideSteps.map((step) => (
+            <li key={step.title} className={`eval-guide__step eval-guide__step--${step.state}`}>
+              <strong>{step.title}</strong>
+              <p>{step.detail}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {nextAction ? (
+        <section className="eval-next-action" aria-live="polite">
+          <strong>Next action: {nextAction.title}</strong>
+          <p>{nextAction.detail}</p>
+        </section>
+      ) : null}
 
       <div className="panel__actions">
         <Button
@@ -512,7 +587,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
           disabled={!canRun}
           onClick={() => void runEval()}
         >
-          Run Eval
+          Run Eval Round
         </Button>
       </div>
 
@@ -535,7 +610,7 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
             <div className="eval-progress__bar" style={{ width: toPercent(progressPercent) }} />
           </div>
           <p className="field-hint">
-            Stage: {evalRun.stage} | Generated {evalRun.progress.generated_variants}/{evalRun.progress.total_variants} | Evaluated{" "}
+            Stage: {humanizeStatus(evalRun.stage)} | Generated {evalRun.progress.generated_variants}/{evalRun.progress.total_variants} | Evaluated{" "}
             {evalRun.progress.evaluated_variants}/{evalRun.progress.total_variants}
           </p>
           {evalRun.anchor_commit_id ? (
@@ -551,60 +626,70 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
         </section>
       ) : null}
 
-      <section className="eval-process" aria-live="polite">
-        <header className="eval-process__header">
-          <h3>Agent Process</h3>
-          <p>Live pipeline states and decisions derived from run telemetry.</p>
-        </header>
-
-        <ol className="eval-timeline">
-          {pipelineSteps.map((step) => (
-            <li key={step} className={`eval-timeline__step eval-timeline__step--${stepStateById[step]}`}>
-              <span className="eval-timeline__dot" />
-              <div>
-                <strong>{pipelineStepLabel[step]}</strong>
-                <p>{stepStateById[step] === "active" ? "In progress" : stepStateById[step] === "done" ? "Completed" : "Pending"}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-
-        <ul className="eval-trace">
-          {processNotes.map((note, index) => (
-            <li key={`${index}-${note}`}>{note}</li>
-          ))}
-        </ul>
-
-        {variants.length > 0 ? (
-          <div className="eval-variant-trace">
-            {variants.map((variant) => (
-              <article key={`trace-${variant.variant_id}`} className="eval-variant-trace__item">
-                <div className="eval-variant-trace__meta">
-                  <strong>{variant.variant_id}</strong>
-                  <span
-                    className={`eval-trace-pill eval-trace-pill--${
-                      variant.status.includes("failed") || variant.status.includes("degraded") || variant.status.includes("skipped")
-                        ? "warn"
-                        : "neutral"
-                    }`}
-                  >
-                    {humanizeStatus(variant.status)}
-                  </span>
-                  {variant.rank ? <span className="eval-trace-pill eval-trace-pill--good">rank #{variant.rank}</span> : null}
-                </div>
-                <p className="eval-variant-trace__line">
-                  {variant.mutation_tags.length > 0 ? variant.mutation_tags.slice(0, 3).join(" • ") : "Mutation tags pending"}
-                </p>
-                <p className="eval-variant-trace__line">
-                  gen {variant.generation_latency_ms ?? "--"}ms | judge {variant.judge_latency_ms ?? "--"}ms | score{" "}
-                  {variant.composite_score.toFixed(3)}
-                </p>
-                {variant.error ? <p className="eval-variant-trace__error">{variant.error}</p> : null}
-              </article>
-            ))}
+      <details
+        className="eval-process"
+        aria-live="polite"
+        open={processExpanded}
+        onToggle={(event) => setProcessExpanded((event.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="eval-process__summary">
+          <div>
+            <strong>Agent Process (Advanced)</strong>
+            <p>Open to inspect live pipeline states, score logic, and branch decisions.</p>
           </div>
-        ) : null}
-      </section>
+          <span className="eval-process__summary-pill">{processExpanded ? "Hide details" : "Show details"}</span>
+        </summary>
+
+        <div className="eval-process__content">
+          <ol className="eval-timeline">
+            {pipelineSteps.map((step) => (
+              <li key={step} className={`eval-timeline__step eval-timeline__step--${stepStateById[step]}`}>
+                <span className="eval-timeline__dot" />
+                <div>
+                  <strong>{pipelineStepLabel[step]}</strong>
+                  <p>{stepStateById[step] === "active" ? "In progress" : stepStateById[step] === "done" ? "Completed" : "Pending"}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <ul className="eval-trace">
+            {processNotes.map((note, index) => (
+              <li key={`${index}-${note}`}>{note}</li>
+            ))}
+          </ul>
+
+          {variants.length > 0 ? (
+            <div className="eval-variant-trace">
+              {variants.map((variant) => (
+                <article key={`trace-${variant.variant_id}`} className="eval-variant-trace__item">
+                  <div className="eval-variant-trace__meta">
+                    <strong>{variant.variant_id}</strong>
+                    <span
+                      className={`eval-trace-pill eval-trace-pill--${
+                        variant.status.includes("failed") || variant.status.includes("degraded") || variant.status.includes("skipped")
+                          ? "warn"
+                          : "neutral"
+                      }`}
+                    >
+                      {humanizeStatus(variant.status)}
+                    </span>
+                    {variant.rank ? <span className="eval-trace-pill eval-trace-pill--good">rank #{variant.rank}</span> : null}
+                  </div>
+                  <p className="eval-variant-trace__line">
+                    {variant.mutation_tags.length > 0 ? variant.mutation_tags.slice(0, 3).join(" • ") : "Mutation tags pending"}
+                  </p>
+                  <p className="eval-variant-trace__line">
+                    gen {variant.generation_latency_ms ?? "--"}ms | judge {variant.judge_latency_ms ?? "--"}ms | score{" "}
+                    {variant.composite_score.toFixed(3)}
+                  </p>
+                  {variant.error ? <p className="eval-variant-trace__error">{variant.error}</p> : null}
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </details>
 
       {leaderboard.length > 0 ? (
         <section className="eval-leaderboard">
@@ -683,8 +768,8 @@ export const EvalWorkbench = ({ anchorCommitId }: EvalWorkbenchProps) => {
           <Button variant="secondary" onClick={() => applyPrompt(topVariant.variant_prompt)}>
             Use Winner as Next Prompt
           </Button>
-          <Button variant="primary" disabled={!canRun} onClick={() => void runEval({ useBranchParent: true })}>
-            Re-run Same Settings
+          <Button variant="primary" disabled={!canRun} onClick={() => void runEval()}>
+            Run Next Round
           </Button>
         </div>
       ) : null}
