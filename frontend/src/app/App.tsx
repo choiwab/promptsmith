@@ -21,6 +21,7 @@ import {
   useProjectId,
   usePromptModalAnchorCommitId,
   usePromptModalOpen,
+  usePromptModalRootMode,
   useRequestStates
 } from "../state/selectors";
 import { useAppStore } from "../state/store";
@@ -74,6 +75,7 @@ export const App = () => {
   const lastError = useLastError();
   const promptModalAnchorCommitId = usePromptModalAnchorCommitId();
   const promptModalOpen = usePromptModalOpen();
+  const promptModalRootMode = usePromptModalRootMode();
   const evalModalAnchorCommitId = useEvalModalAnchorCommitId();
   const evalModalOpen = useEvalModalOpen();
   const compareModalOpen = useCompareModalOpen();
@@ -99,6 +101,7 @@ export const App = () => {
     lastError?.operation !== "compare" &&
     lastError?.operation !== "eval" &&
     lastError?.operation !== "delete";
+  const isSafetyRejection = lastError?.code === "OPENAI_SAFETY_REJECTION" && lastError?.operation === "generate";
 
   const commitInfo = history.find((item) => item.commit_id === commitInfoCommitId);
   const commitInfoImage = resolveAssetUrl(commitInfo?.image_paths?.[0]);
@@ -144,11 +147,22 @@ export const App = () => {
         {showInlineError ? (
           <section className="inline-error">
             <ErrorState
-              title="Request failed"
+              title={isSafetyRejection ? "Generation blocked by safety policy" : "Request failed"}
               code={lastError?.code}
               message={lastError?.message || "An unexpected error occurred."}
               onRetry={lastError?.retryable ? retryLastOperation : undefined}
-            />
+            >
+              {isSafetyRejection ? (
+                <div className="error-guidance">
+                  <p>Try revising the prompt with safer wording and removing sensitive or disallowed details.</p>
+                  <ul>
+                    <li>Avoid explicit violence, self-harm, sexual content, or illegal activity instructions.</li>
+                    <li>Use neutral descriptive language for character, style, and scene.</li>
+                    <li>If it still fails, simplify the prompt and re-add detail gradually.</li>
+                  </ul>
+                </div>
+              ) : null}
+            </ErrorState>
           </section>
         ) : null}
 
@@ -163,7 +177,11 @@ export const App = () => {
           size="xl"
           onClose={closePromptModal}
         >
-          <PromptWorkbench anchorCommitId={promptModalAnchorCommitId} onGenerated={closePromptModal} />
+          <PromptWorkbench
+            anchorCommitId={promptModalAnchorCommitId}
+            forceRoot={promptModalRootMode}
+            onGenerated={closePromptModal}
+          />
         </Modal>
 
         <Modal

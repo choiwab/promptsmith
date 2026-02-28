@@ -17,7 +17,7 @@ type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" 
 type LastOperation =
   | { kind: "project"; projectId: string; name?: string }
   | { kind: "history" }
-  | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string }
+  | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string; forceRoot?: boolean }
   | { kind: "baseline"; commitId: string }
   | { kind: "compare"; commitId: string; baselineCommitId?: string }
   | { kind: "eval"; payload: CreateEvalRunRequest }
@@ -49,6 +49,7 @@ interface AppState {
   lastOperation: LastOperation;
   toasts: AppToast[];
   promptModalOpen: boolean;
+  promptModalRootMode: boolean;
   promptModalAnchorCommitId?: string;
   evalModalOpen: boolean;
   evalModalAnchorCommitId?: string;
@@ -65,7 +66,7 @@ interface AppState {
   refreshProjects: () => Promise<void>;
   setProject: (projectId: string, name?: string) => Promise<void>;
   fetchHistory: () => Promise<void>;
-  generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
+  generateCommit: (prompt: string, seed?: string, parentCommitId?: string, forceRoot?: boolean) => Promise<void>;
   setBaseline: (commitId: string) => Promise<void>;
   compareCommit: (commitId: string, baselineCommitId?: string) => Promise<void>;
   selectCompareNode: (commitId: string) => Promise<void>;
@@ -74,6 +75,7 @@ interface AppState {
   requestDeleteCommit: (commitId?: string) => void;
   clearDeleteCommitRequest: () => void;
   openPromptModal: (anchorCommitId?: string) => void;
+  openRootPromptModal: () => void;
   closePromptModal: () => void;
   openEvalModal: (anchorCommitId?: string) => void;
   closeEvalModal: () => void;
@@ -97,18 +99,34 @@ const initialRequestStates: RequestStates = {
   delete: "idle"
 };
 
-const toRequestError = (error: unknown, operation: OperationKey): RequestError => {
-  if (error instanceof ApiClientError) {
-    return error.toRequestError(operation);
+const normalizeRequestError = (error: RequestError): RequestError => {
+  if (
+    error.code === "OPENAI_UPSTREAM_ERROR" &&
+    /rejected by the safety system/i.test(error.message)
+  ) {
+    return {
+      ...error,
+      code: "OPENAI_SAFETY_REJECTION",
+      message: "Generation was blocked by safety policy. Please revise the prompt and try again.",
+      retryable: false
+    };
   }
 
-  return {
+  return error;
+};
+
+const toRequestError = (error: unknown, operation: OperationKey): RequestError => {
+  if (error instanceof ApiClientError) {
+    return normalizeRequestError(error.toRequestError(operation));
+  }
+
+  return normalizeRequestError({
     code: "UNKNOWN_ERROR",
     message: "An unexpected error occurred.",
     status: 0,
     operation,
     retryable: false
-  };
+  });
 };
 
 const setRequestState = (state: AppState, operation: OperationKey, value: AsyncState): RequestStates => {
@@ -139,6 +157,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastOperation: null,
   toasts: [],
   promptModalOpen: false,
+  promptModalRootMode: false,
   promptModalAnchorCommitId: undefined,
   evalModalOpen: false,
   evalModalAnchorCommitId: undefined,
@@ -295,14 +314,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  generateCommit: async (prompt, seed, parentCommitId) => {
+  generateCommit: async (prompt, seed, parentCommitId, forceRoot = false) => {
     const startedAtMs = Date.now();
     const knownCommitIds = new Set(get().history.map((item) => item.commit_id));
 
     set((state) => ({
       requestStates: setRequestState(state, "generate", "loading"),
       lastError: undefined,
-      lastOperation: { kind: "generate", prompt, model: state.model, seed, parentCommitId }
+      lastOperation: { kind: "generate", prompt, model: state.model, seed, parentCommitId, forceRoot }
     }));
 
     try {
@@ -311,7 +330,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         prompt,
         model: get().model,
         seed: seed || undefined,
-        parent_commit_id: parentCommitId || undefined
+        parent_commit_id: forceRoot ? undefined : parentCommitId || undefined,
+        force_root: forceRoot ? true : undefined
       });
 
       set((state) => {
@@ -598,13 +618,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   openPromptModal: (anchorCommitId) => {
     set({
       promptModalOpen: true,
+      promptModalRootMode: false,
       promptModalAnchorCommitId: anchorCommitId,
       selectedCommitId: anchorCommitId ?? get().selectedCommitId
     });
   },
 
+  openRootPromptModal: () => {
+    set({
+      promptModalOpen: true,
+      promptModalRootMode: true,
+      promptModalAnchorCommitId: undefined
+    });
+  },
+
   closePromptModal: () => {
-    set({ promptModalOpen: false, promptModalAnchorCommitId: undefined });
+    set({ promptModalOpen: false, promptModalRootMode: false, promptModalAnchorCommitId: undefined });
   },
 
   openEvalModal: (anchorCommitId) => {
@@ -749,7 +778,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (op.kind === "generate") {
-      await get().generateCommit(op.prompt, op.seed, op.parentCommitId);
+      await get().generateCommit(op.prompt, op.seed, op.parentCommitId, op.forceRoot);
       return;
     }
 
