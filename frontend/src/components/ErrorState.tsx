@@ -1,3 +1,4 @@
+import type { PropsWithChildren } from "react";
 import { Button } from "./Button";
 
 interface ErrorStateProps {
@@ -13,13 +14,15 @@ export const ErrorState = ({
   code,
   message,
   onRetry,
-  retryLabel = "Retry"
-}: ErrorStateProps) => {
+  retryLabel = "Retry",
+  children
+}: PropsWithChildren<ErrorStateProps>) => {
   return (
     <section className="state state--error" role="alert">
       <h3>{title}</h3>
       {code ? <p className="state__meta">{code}</p> : null}
       <p>{message}</p>
+      {children}
       {onRetry ? (
         <Button variant="danger" onClick={onRetry}>
           {retryLabel}

@@ -6,7 +6,6 @@ import { CompareDashboard } from "../features/compare-dashboard/CompareDashboard
 import { EvalWorkbench } from "../features/eval-workbench/EvalWorkbench";
 import { HistoryPanel } from "../features/history-panel/HistoryPanel";
 import { LineageWorkspace } from "../features/history-panel/LineageWorkspace";
-import { ToastHost } from "../features/notifications/ToastHost";
 import { ProjectSidebar } from "../features/project-sidebar/ProjectSidebar";
 import { PromptWorkbench } from "../features/prompt-workbench/PromptWorkbench";
 import {
@@ -18,9 +17,9 @@ import {
   useGraphFullscreenOpen,
   useHistory,
   useLastError,
-  useProjectId,
   usePromptModalAnchorCommitId,
   usePromptModalOpen,
+  usePromptModalRootMode,
   useRequestStates
 } from "../state/selectors";
 import { useAppStore } from "../state/store";
@@ -69,11 +68,11 @@ export const App = () => {
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
   const history = useHistory();
-  const projectId = useProjectId();
   const requestStates = useRequestStates();
   const lastError = useLastError();
   const promptModalAnchorCommitId = usePromptModalAnchorCommitId();
   const promptModalOpen = usePromptModalOpen();
+  const promptModalRootMode = usePromptModalRootMode();
   const evalModalAnchorCommitId = useEvalModalAnchorCommitId();
   const evalModalOpen = useEvalModalOpen();
   const compareModalOpen = useCompareModalOpen();
@@ -99,6 +98,7 @@ export const App = () => {
     lastError?.operation !== "compare" &&
     lastError?.operation !== "eval" &&
     lastError?.operation !== "delete";
+  const isSafetyRejection = lastError?.code === "OPENAI_SAFETY_REJECTION" && lastError?.operation === "generate";
 
   const commitInfo = history.find((item) => item.commit_id === commitInfoCommitId);
   const commitInfoImage = resolveAssetUrl(commitInfo?.image_paths?.[0]);
@@ -125,11 +125,6 @@ export const App = () => {
               <p>Prompt history and lineage-driven generation workflows.</p>
             </div>
           </div>
-          <div className="app-header__controls">
-            <span className="app-header__chip">Project: {projectId}</span>
-            <span className="app-header__chip">Interactive lineage</span>
-            <span className="app-header__chip">Modal compare + eval</span>
-          </div>
         </header>
 
         {showBlockingError ? (
@@ -144,11 +139,22 @@ export const App = () => {
         {showInlineError ? (
           <section className="inline-error">
             <ErrorState
-              title="Request failed"
+              title={isSafetyRejection ? "Generation blocked by safety policy" : "Request failed"}
               code={lastError?.code}
               message={lastError?.message || "An unexpected error occurred."}
               onRetry={lastError?.retryable ? retryLastOperation : undefined}
-            />
+            >
+              {isSafetyRejection ? (
+                <div className="error-guidance">
+                  <p>Try revising the prompt with safer wording and removing sensitive or disallowed details.</p>
+                  <ul>
+                    <li>Avoid explicit violence, self-harm, sexual content, or illegal activity instructions.</li>
+                    <li>Use neutral descriptive language for character, style, and scene.</li>
+                    <li>If it still fails, simplify the prompt and re-add detail gradually.</li>
+                  </ul>
+                </div>
+              ) : null}
+            </ErrorState>
           </section>
         ) : null}
 
@@ -163,7 +169,11 @@ export const App = () => {
           size="xl"
           onClose={closePromptModal}
         >
-          <PromptWorkbench anchorCommitId={promptModalAnchorCommitId} onGenerated={closePromptModal} />
+          <PromptWorkbench
+            anchorCommitId={promptModalAnchorCommitId}
+            forceRoot={promptModalRootMode}
+            onGenerated={closePromptModal}
+          />
         </Modal>
 
         <Modal
@@ -306,8 +316,6 @@ export const App = () => {
         >
           <LineageWorkspace fullscreen />
         </Modal>
-
-        <ToastHost />
       </div>
     </div>
   );

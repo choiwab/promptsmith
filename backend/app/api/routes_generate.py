@@ -14,6 +14,7 @@ class GenerateRequest(BaseModel):
     model: str = Field(min_length=1)
     seed: str | None = None
     parent_commit_id: str | None = None
+    force_root: bool = False
 
 
 class GenerateResponse(BaseModel):
@@ -34,6 +35,7 @@ async def generate(payload: GenerateRequest, request: Request) -> GenerateRespon
         model=payload.model,
         seed=payload.seed,
         parent_commit_id=payload.parent_commit_id,
+        force_root=payload.force_root,
     )
     return GenerateResponse(
         commit_id=commit.commit_id,

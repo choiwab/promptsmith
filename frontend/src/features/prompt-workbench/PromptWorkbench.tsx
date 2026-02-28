@@ -6,20 +6,21 @@ import { useAppStore } from "../../state/store";
 
 interface PromptWorkbenchProps {
   anchorCommitId?: string;
+  forceRoot?: boolean;
   onGenerated?: () => void;
 }
 
-export const PromptWorkbench = ({ anchorCommitId, onGenerated }: PromptWorkbenchProps) => {
+export const PromptWorkbench = ({ anchorCommitId, forceRoot = false, onGenerated }: PromptWorkbenchProps) => {
   const minPromptLength = 5;
   const [prompt, setPrompt] = useState("");
   const [seed, setSeed] = useState("");
-  const [linkToSelected, setLinkToSelected] = useState(true);
+  const [linkToSelected, setLinkToSelected] = useState(!forceRoot);
   const selectedCommitId = useSelectedCommitId();
   const generateCommit = useAppStore((state) => state.generateCommit);
   const requestStates = useRequestStates();
   const promptLength = prompt.trim().length;
   const resolvedAnchorId = anchorCommitId || selectedCommitId;
-  const parentCommitId = linkToSelected ? resolvedAnchorId : undefined;
+  const parentCommitId = forceRoot ? undefined : linkToSelected ? resolvedAnchorId : undefined;
 
   const canSubmit = useMemo(() => {
     return promptLength >= minPromptLength && requestStates.generate !== "loading";
@@ -31,7 +32,7 @@ export const PromptWorkbench = ({ anchorCommitId, onGenerated }: PromptWorkbench
       return;
     }
 
-    await generateCommit(trimmed, seed.trim() || undefined, parentCommitId);
+    await generateCommit(trimmed, seed.trim() || undefined, parentCommitId, forceRoot);
     setPrompt("");
     onGenerated?.();
   };
@@ -67,22 +68,28 @@ export const PromptWorkbench = ({ anchorCommitId, onGenerated }: PromptWorkbench
         placeholder="1234"
       />
 
-      <label className="checkbox-field" htmlFor="lineage-parent-toggle">
-        <input
-          id="lineage-parent-toggle"
-          type="checkbox"
-          checked={linkToSelected}
-          disabled={!resolvedAnchorId}
-          onChange={(event) => setLinkToSelected(event.target.checked)}
-        />
-        <span>
-          Use selected commit as lineage parent
-          {resolvedAnchorId ? <strong> ({resolvedAnchorId})</strong> : " (none selected)"}
-        </span>
-      </label>
-      <p className="field-hint">
-        If no parent is selected, backend uses the latest successful commit image + prompt as generation context.
-      </p>
+      {!forceRoot ? (
+        <>
+          <label className="checkbox-field" htmlFor="lineage-parent-toggle">
+            <input
+              id="lineage-parent-toggle"
+              type="checkbox"
+              checked={linkToSelected}
+              disabled={!resolvedAnchorId}
+              onChange={(event) => setLinkToSelected(event.target.checked)}
+            />
+            <span>
+              Use selected commit as lineage parent
+              {resolvedAnchorId ? <strong> ({resolvedAnchorId})</strong> : " (none selected)"}
+            </span>
+          </label>
+          <p className="field-hint">
+            If no parent is selected, backend uses the latest successful commit image + prompt as generation context.
+          </p>
+        </>
+      ) : (
+        <p className="field-hint">This commit will be created as a new root in the project lineage.</p>
+      )}
 
       <div className="panel__actions">
         <Button variant="primary" loading={requestStates.generate === "loading"} disabled={!canSubmit} onClick={onSubmit}>

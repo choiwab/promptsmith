@@ -18,6 +18,7 @@ export interface GenerateRequest {
   model: string;
   seed?: string;
   parent_commit_id?: string;
+  force_root?: boolean;
 }
 
 export interface GenerateResponse {
