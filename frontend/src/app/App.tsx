@@ -18,7 +18,6 @@ import {
   useGraphFullscreenOpen,
   useHistory,
   useLastError,
-  useProjectId,
   usePromptModalAnchorCommitId,
   usePromptModalOpen,
   usePromptModalRootMode,
@@ -70,7 +69,6 @@ export const App = () => {
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
   const history = useHistory();
-  const projectId = useProjectId();
   const requestStates = useRequestStates();
   const lastError = useLastError();
   const promptModalAnchorCommitId = usePromptModalAnchorCommitId();
@@ -127,11 +125,6 @@ export const App = () => {
               <h1>{appName}</h1>
               <p>Prompt history and lineage-driven generation workflows.</p>
             </div>
-          </div>
-          <div className="app-header__controls">
-            <span className="app-header__chip">Project: {projectId}</span>
-            <span className="app-header__chip">Interactive lineage</span>
-            <span className="app-header__chip">Modal compare + eval</span>
           </div>
         </header>
 
