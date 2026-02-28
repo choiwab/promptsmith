@@ -1,0 +1,320 @@
+import { create } from "zustand";
+import { apiClient, ApiClientError } from "../api/client";
+import { normalizeCompareResponse, normalizeHistoryResponse } from "../api/mappers";
+import type {
+  AppToast,
+  AsyncState,
+  CompareResponse,
+  HistoryItem,
+  RequestError
+} from "../api/types";
+
+type OperationKey = "history" | "generate" | "baseline" | "compare";
+
+type LastOperation =
+  | { kind: "history" }
+  | { kind: "generate"; prompt: string; model: string; seed?: string }
+  | { kind: "baseline"; commitId: string }
+  | { kind: "compare"; commitId: string }
+  | null;
+
+interface RequestStates {
+  history: AsyncState;
+  generate: AsyncState;
+  baseline: AsyncState;
+  compare: AsyncState;
+}
+
+interface AppState {
+  projectId: string;
+  model: string;
+  history: HistoryItem[];
+  nextCursor?: string;
+  activeBaselineCommitId?: string;
+  selectedCommitId?: string;
+  latestCompareResult?: CompareResponse;
+  requestStates: RequestStates;
+  lastError?: RequestError;
+  lastOperation: LastOperation;
+  toasts: AppToast[];
+  setSelectedCommit: (commitId?: string) => void;
+  dismissToast: (id: string) => void;
+  pushToast: (kind: AppToast["kind"], message: string) => void;
+  clearError: () => void;
+  fetchHistory: () => Promise<void>;
+  generateCommit: (prompt: string, seed?: string) => Promise<void>;
+  setBaseline: (commitId: string) => Promise<void>;
+  compareCommit: (commitId: string) => Promise<void>;
+  retryLastOperation: () => Promise<void>;
+  resolveAssetUrl: (path?: string) => string | undefined;
+}
+
+const initialRequestStates: RequestStates = {
+  history: "idle",
+  generate: "idle",
+  baseline: "idle",
+  compare: "idle"
+};
+
+const toRequestError = (error: unknown, operation: OperationKey): RequestError => {
+  if (error instanceof ApiClientError) {
+    return error.toRequestError(operation);
+  }
+
+  return {
+    code: "UNKNOWN_ERROR",
+    message: "An unexpected error occurred.",
+    status: 0,
+    operation,
+    retryable: false
+  };
+};
+
+const setRequestState = (state: AppState, operation: OperationKey, value: AsyncState): RequestStates => {
+  return {
+    ...state.requestStates,
+    [operation]: value
+  };
+};
+
+const pushToastState = (state: AppState, toast: AppToast): AppToast[] => {
+  return [...state.toasts, toast].slice(-5);
+};
+
+export const useAppStore = create<AppState>((set, get) => ({
+  projectId: "default",
+  model: "gpt-image-1",
+  history: [],
+  nextCursor: undefined,
+  activeBaselineCommitId: undefined,
+  selectedCommitId: undefined,
+  latestCompareResult: undefined,
+  requestStates: initialRequestStates,
+  lastError: undefined,
+  lastOperation: null,
+  toasts: [],
+
+  setSelectedCommit: (commitId) => {
+    set({ selectedCommitId: commitId });
+  },
+
+  dismissToast: (id) => {
+    set((state) => ({
+      toasts: state.toasts.filter((toast) => toast.id !== id)
+    }));
+  },
+
+  pushToast: (kind, message) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    set((state) => ({
+      toasts: pushToastState(state, { id, kind, message })
+    }));
+  },
+
+  clearError: () => {
+    set({ lastError: undefined });
+  },
+
+  fetchHistory: async () => {
+    set((state) => ({
+      requestStates: setRequestState(state, "history", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "history" }
+    }));
+
+    try {
+      const response = normalizeHistoryResponse(await apiClient.getHistory(get().projectId));
+
+      set((state) => {
+        const selectedCommitId =
+          state.selectedCommitId && response.items.some((item) => item.commit_id === state.selectedCommitId)
+            ? state.selectedCommitId
+            : response.items[0]?.commit_id;
+
+        return {
+          history: response.items,
+          nextCursor: response.next_cursor,
+          activeBaselineCommitId: response.active_baseline_commit_id ?? state.activeBaselineCommitId,
+          selectedCommitId,
+          requestStates: setRequestState(state, "history", "success")
+        };
+      });
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "history");
+      set((state) => ({
+        requestStates: setRequestState(state, "history", "error"),
+        lastError: parsed
+      }));
+    }
+  },
+
+  generateCommit: async (prompt, seed) => {
+    set((state) => ({
+      requestStates: setRequestState(state, "generate", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "generate", prompt, model: state.model, seed }
+    }));
+
+    try {
+      const response = await apiClient.generate({
+        project_id: get().projectId,
+        prompt,
+        model: get().model,
+        seed: seed || undefined
+      });
+
+      set((state) => {
+        const generatedItem: HistoryItem = {
+          commit_id: response.commit_id,
+          status: response.status,
+          created_at: response.created_at,
+          prompt,
+          image_paths: response.image_paths
+        };
+
+        const existing = state.history.find((item) => item.commit_id === response.commit_id);
+        const history = existing ? state.history : [generatedItem, ...state.history];
+
+        return {
+          history,
+          selectedCommitId: response.commit_id,
+          requestStates: setRequestState(state, "generate", "success"),
+          toasts: pushToastState(state, {
+            id: `${Date.now()}-gen`,
+            kind: "success",
+            message: `Generated ${response.commit_id}.`
+          })
+        };
+      });
+
+      await get().fetchHistory();
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "generate");
+      set((state) => ({
+        requestStates: setRequestState(state, "generate", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-gen-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
+  setBaseline: async (commitId) => {
+    set((state) => ({
+      requestStates: setRequestState(state, "baseline", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "baseline", commitId }
+    }));
+
+    try {
+      const response = await apiClient.setBaseline({
+        project_id: get().projectId,
+        commit_id: commitId
+      });
+
+      set((state) => ({
+        activeBaselineCommitId: response.active_baseline_commit_id,
+        requestStates: setRequestState(state, "baseline", "success"),
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-baseline`,
+          kind: "success",
+          message: `Baseline set to ${response.active_baseline_commit_id}.`
+        })
+      }));
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "baseline");
+      set((state) => ({
+        requestStates: setRequestState(state, "baseline", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-baseline-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
+  compareCommit: async (commitId) => {
+    const baselineId = get().activeBaselineCommitId;
+
+    if (!baselineId) {
+      const error: RequestError = {
+        code: "BASELINE_NOT_SET",
+        message: "Set a baseline commit to run regression checks.",
+        status: 400,
+        operation: "compare",
+        retryable: false
+      };
+
+      set((state) => ({
+        lastError: error,
+        requestStates: setRequestState(state, "compare", "error")
+      }));
+      return;
+    }
+
+    set((state) => ({
+      requestStates: setRequestState(state, "compare", "loading"),
+      selectedCommitId: commitId,
+      lastError: undefined,
+      lastOperation: { kind: "compare", commitId }
+    }));
+
+    try {
+      const response = normalizeCompareResponse(
+        await apiClient.compare({
+          project_id: get().projectId,
+          candidate_commit_id: commitId
+        })
+      );
+
+      set((state) => ({
+        latestCompareResult: response,
+        requestStates: setRequestState(state, "compare", "success")
+      }));
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "compare");
+      set((state) => ({
+        requestStates: setRequestState(state, "compare", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-compare-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
+  retryLastOperation: async () => {
+    const op = get().lastOperation;
+    if (!op) {
+      return;
+    }
+
+    if (op.kind === "history") {
+      await get().fetchHistory();
+      return;
+    }
+
+    if (op.kind === "generate") {
+      await get().generateCommit(op.prompt, op.seed);
+      return;
+    }
+
+    if (op.kind === "baseline") {
+      await get().setBaseline(op.commitId);
+      return;
+    }
+
+    await get().compareCommit(op.commitId);
+  },
+
+  resolveAssetUrl: (path) => {
+    return apiClient.resolveAssetUrl(path);
+  }
+}));
