@@ -260,6 +260,17 @@
   padding: var(--space-3);
 }
 
+.lineage-empty--canvas {
+  position: absolute;
+  inset: 24px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .lineage-graph-scroll {
   margin-top: var(--space-3);
   flex: 1;
@@ -275,6 +286,10 @@
 
 .lineage-canvas {
   position: relative;
+}
+
+.lineage-canvas--empty .lineage-graph {
+  opacity: 0.22;
 }
 
 .lineage-graph {

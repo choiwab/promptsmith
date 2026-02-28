@@ -14,11 +14,13 @@ import {
   useCompareModalOpen,
   useDeleteTargetCommitId,
   useEvalModalAnchorCommitId,
+  useEvalModalOpen,
   useGraphFullscreenOpen,
   useHistory,
   useLastError,
   useProjectId,
   usePromptModalAnchorCommitId,
+  usePromptModalOpen,
   useRequestStates
 } from "../state/selectors";
 import { useAppStore } from "../state/store";
@@ -71,7 +73,9 @@ export const App = () => {
   const requestStates = useRequestStates();
   const lastError = useLastError();
   const promptModalAnchorCommitId = usePromptModalAnchorCommitId();
+  const promptModalOpen = usePromptModalOpen();
   const evalModalAnchorCommitId = useEvalModalAnchorCommitId();
+  const evalModalOpen = useEvalModalOpen();
   const compareModalOpen = useCompareModalOpen();
   const commitInfoCommitId = useCommitInfoCommitId();
   const graphFullscreenOpen = useGraphFullscreenOpen();
@@ -154,7 +158,7 @@ export const App = () => {
         </main>
 
         <Modal
-          open={Boolean(promptModalAnchorCommitId)}
+          open={promptModalOpen}
           title="Prompt Workbench"
           size="xl"
           onClose={closePromptModal}
@@ -163,7 +167,7 @@ export const App = () => {
         </Modal>
 
         <Modal
-          open={Boolean(evalModalAnchorCommitId)}
+          open={evalModalOpen}
           title="Eval Workbench"
           size="xl"
           onClose={closeEvalModal}

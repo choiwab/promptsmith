@@ -146,18 +146,14 @@ export const LineageGraph = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [tooltipDirections, setTooltipDirections] = useState<Record<string, TooltipDirection>>({});
 
-  if (nodes.length === 0) {
-    return <div className="lineage-empty">No lineage data yet.</div>;
-  }
-
   const colWidth = 280;
   const rowHeight = 108;
   const padX = 28;
   const padY = 24;
   const nodeW = 224;
   const nodeH = 74;
-  const width = padX * 2 + (maxDepth + 1) * colWidth;
-  const height = Math.max(190, padY * 2 + nodes.length * rowHeight);
+  const width = Math.max(680, padX * 2 + (maxDepth + 1) * colWidth);
+  const height = Math.max(320, padY * 2 + Math.max(nodes.length, 1) * rowHeight);
 
   const nodeX = (depth: number): number => padX + depth * colWidth;
   const nodeY = (row: number): number => padY + row * rowHeight;
@@ -181,7 +177,12 @@ export const LineageGraph = ({
 
   return (
     <div className="lineage-graph-scroll" ref={scrollRef}>
-      <div className="lineage-canvas" style={{ width, height }}>
+      <div className={`lineage-canvas${nodes.length === 0 ? " lineage-canvas--empty" : ""}`} style={{ width, height }}>
+        {nodes.length === 0 ? (
+          <div className="lineage-empty lineage-empty--canvas">
+            No lineage data yet. Use Add First Commit in Commit History.
+          </div>
+        ) : null}
         <svg className="lineage-graph" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Commit lineage graph">
           {edges.map((edge) => {
             const fromX = nodeX(edge.from.depth) + nodeW;
@@ -285,6 +286,7 @@ export const LineageGraph = ({
             </div>
           );
         })}
+
       </div>
     </div>
   );

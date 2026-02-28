@@ -48,7 +48,9 @@ interface AppState {
   lastError?: RequestError;
   lastOperation: LastOperation;
   toasts: AppToast[];
+  promptModalOpen: boolean;
   promptModalAnchorCommitId?: string;
+  evalModalOpen: boolean;
   evalModalAnchorCommitId?: string;
   compareModalOpen: boolean;
   commitInfoCommitId?: string;
@@ -136,7 +138,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastError: undefined,
   lastOperation: null,
   toasts: [],
+  promptModalOpen: false,
   promptModalAnchorCommitId: undefined,
+  evalModalOpen: false,
   evalModalAnchorCommitId: undefined,
   compareModalOpen: false,
   commitInfoCommitId: undefined,
@@ -593,24 +597,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openPromptModal: (anchorCommitId) => {
     set({
+      promptModalOpen: true,
       promptModalAnchorCommitId: anchorCommitId,
       selectedCommitId: anchorCommitId ?? get().selectedCommitId
     });
   },
 
   closePromptModal: () => {
-    set({ promptModalAnchorCommitId: undefined });
+    set({ promptModalOpen: false, promptModalAnchorCommitId: undefined });
   },
 
   openEvalModal: (anchorCommitId) => {
     set({
+      evalModalOpen: true,
       evalModalAnchorCommitId: anchorCommitId,
       selectedCommitId: anchorCommitId ?? get().selectedCommitId
     });
   },
 
   closeEvalModal: () => {
-    set({ evalModalAnchorCommitId: undefined });
+    set({ evalModalOpen: false, evalModalAnchorCommitId: undefined });
   },
 
   openCompareModal: () => {

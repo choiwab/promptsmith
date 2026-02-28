@@ -1,4 +1,5 @@
 import { Badge } from "../../components/Badge";
+import { Button } from "../../components/Button";
 import { useBaselineCommitId, useHistory, useSelectedCommitId } from "../../state/selectors";
 import { useAppStore } from "../../state/store";
 
@@ -19,6 +20,7 @@ export const HistoryPanel = () => {
   const baselineId = useBaselineCommitId();
   const selectedCommitId = useSelectedCommitId();
   const setSelectedCommit = useAppStore((state) => state.setSelectedCommit);
+  const openPromptModal = useAppStore((state) => state.openPromptModal);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
   return (
@@ -28,7 +30,16 @@ export const HistoryPanel = () => {
         <p>Newest commits first. Select one to inspect lineage details.</p>
       </header>
 
-      {history.length === 0 ? <div className="state">No commits yet. Generate your first commit.</div> : null}
+      {history.length === 0 ? (
+        <div className="state">
+          <p>No commits yet. Generate your first commit.</p>
+          <div className="panel__actions">
+            <Button variant="primary" onClick={() => openPromptModal()}>
+              Add First Commit
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <ul className="history-list" aria-label="Commit history">
         {history.map((item) => {
