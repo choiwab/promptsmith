@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from io import BytesIO
 from pathlib import Path
@@ -11,6 +12,13 @@ from backend.app.services.pixel_metrics import PixelMetricsService
 from backend.app.services.scoring import compute_drift_score, compute_verdict
 from backend.app.storage.repository import Repository
 from backend.app.storage.schemas import ComparisonReportRecord, utc_now_iso
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _encode_png_bytes(image: Image.Image) -> bytes:
@@ -44,15 +52,21 @@ def _create_demo_image(variant: int) -> Image.Image:
 
 def main() -> None:
     settings = get_settings()
-
-    # Seed data must be deterministic, so reset local working assets first.
-    for directory in [settings.app_image_dir, settings.app_artifact_dir]:
-        if directory.exists():
-            shutil.rmtree(directory)
-    settings.ensure_directories()
+    reset_storage = _env_flag("SEED_DEMO_RESET", default=False)
 
     repository = Repository(settings)
-    repository.reset_storage()
+    if not reset_storage and repository.list_projects():
+        print("Seed skipped: existing project data found. Set SEED_DEMO_RESET=true to force reseed.")
+        return
+
+    if reset_storage:
+        # Full reseed mode intentionally wipes previous records and artifacts.
+        for directory in [settings.app_image_dir, settings.app_artifact_dir]:
+            if directory.exists():
+                shutil.rmtree(directory)
+        repository.reset_storage()
+
+    settings.ensure_directories()
     pixel_service = PixelMetricsService()
 
     project_id = "default"
