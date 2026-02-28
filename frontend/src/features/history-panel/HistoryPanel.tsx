@@ -20,7 +20,7 @@ export const HistoryPanel = () => {
   const baselineId = useBaselineCommitId();
   const selectedCommitId = useSelectedCommitId();
   const setSelectedCommit = useAppStore((state) => state.setSelectedCommit);
-  const openPromptModal = useAppStore((state) => state.openPromptModal);
+  const openRootPromptModal = useAppStore((state) => state.openRootPromptModal);
   const resolveAssetUrl = useAppStore((state) => state.resolveAssetUrl);
 
   return (
@@ -28,16 +28,16 @@ export const HistoryPanel = () => {
       <header className="panel__header">
         <h2>Commit History</h2>
         <p>Newest commits first. Select one to inspect lineage details.</p>
+        <div className="panel__actions">
+          <Button variant="primary" onClick={() => openRootPromptModal()}>
+            Add Root Commit
+          </Button>
+        </div>
       </header>
 
       {history.length === 0 ? (
         <div className="state">
           <p>No commits yet. Generate your first commit.</p>
-          <div className="panel__actions">
-            <Button variant="primary" onClick={() => openPromptModal()}>
-              Add First Commit
-            </Button>
-          </div>
         </div>
       ) : null}
 

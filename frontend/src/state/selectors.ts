@@ -12,6 +12,7 @@ export const useRequestStates = () => useAppStore((state) => state.requestStates
 export const useLastError = (): RequestError | undefined => useAppStore((state) => state.lastError);
 export const useToasts = (): AppToast[] => useAppStore((state) => state.toasts);
 export const usePromptModalOpen = (): boolean => useAppStore((state) => state.promptModalOpen);
+export const usePromptModalRootMode = (): boolean => useAppStore((state) => state.promptModalRootMode);
 export const usePromptModalAnchorCommitId = (): string | undefined => useAppStore((state) => state.promptModalAnchorCommitId);
 export const useEvalModalOpen = (): boolean => useAppStore((state) => state.evalModalOpen);
 export const useEvalModalAnchorCommitId = (): string | undefined => useAppStore((state) => state.evalModalAnchorCommitId);
