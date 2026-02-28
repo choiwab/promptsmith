@@ -16,6 +16,7 @@ type OperationKey = "project" | "history" | "generate" | "baseline" | "compare" 
 
 type LastOperation =
   | { kind: "project"; projectId: string; name?: string }
+  | { kind: "projectDelete"; projectId: string }
   | { kind: "history" }
   | { kind: "generate"; prompt: string; model: string; seed?: string; parentCommitId?: string }
   | { kind: "baseline"; commitId: string }
@@ -64,6 +65,7 @@ interface AppState {
   clearError: () => void;
   refreshProjects: () => Promise<void>;
   setProject: (projectId: string, name?: string) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   fetchHistory: () => Promise<void>;
   generateCommit: (prompt: string, seed?: string, parentCommitId?: string) => Promise<void>;
   setBaseline: (commitId: string) => Promise<void>;
@@ -206,14 +208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedCommitId: undefined,
         latestCompareResult: undefined,
         latestEvalRun: undefined,
-        requestStates: setRequestState(state, "project", "success"),
-        toasts: pushToastState(state, {
-          id: `${Date.now()}-project`,
-          kind: "info",
-          message: response.created
-            ? `Created project ${response.project_id}.`
-            : `Loaded project ${response.project_id}.`
-        })
+        requestStates: setRequestState(state, "project", "success")
       }));
 
       await Promise.all([get().fetchHistory(), get().refreshProjects()]);
@@ -224,6 +219,54 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastError: parsed,
         toasts: pushToastState(state, {
           id: `${Date.now()}-project-error`,
+          kind: "error",
+          message: `${parsed.code}: ${parsed.message}`
+        })
+      }));
+    }
+  },
+
+  deleteProject: async (projectId) => {
+    const targetProjectId = projectId.trim();
+    if (!targetProjectId) {
+      return;
+    }
+
+    set((state) => ({
+      requestStates: setRequestState(state, "project", "loading"),
+      lastError: undefined,
+      lastOperation: { kind: "projectDelete", projectId: targetProjectId }
+    }));
+
+    try {
+      await apiClient.deleteProject(targetProjectId);
+      const wasActiveProject = get().projectId === targetProjectId;
+
+      set((state) => ({
+        projects: state.projects.filter((project) => project.project_id !== targetProjectId),
+        requestStates: setRequestState(state, "project", "success"),
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-project-delete`,
+          kind: "success",
+          message: `Deleted project ${targetProjectId}.`
+        })
+      }));
+
+      if (wasActiveProject) {
+        const fallbackProjectId =
+          get().projects.find((project) => project.project_id !== targetProjectId)?.project_id ?? "default";
+        await get().setProject(fallbackProjectId);
+        return;
+      }
+
+      await get().refreshProjects();
+    } catch (error: unknown) {
+      const parsed = toRequestError(error, "project");
+      set((state) => ({
+        requestStates: setRequestState(state, "project", "error"),
+        lastError: parsed,
+        toasts: pushToastState(state, {
+          id: `${Date.now()}-project-delete-error`,
           kind: "error",
           message: `${parsed.code}: ${parsed.message}`
         })
@@ -745,6 +788,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (op.kind === "project") {
       await get().setProject(op.projectId, op.name);
+      return;
+    }
+
+    if (op.kind === "projectDelete") {
+      await get().deleteProject(op.projectId);
       return;
     }
 

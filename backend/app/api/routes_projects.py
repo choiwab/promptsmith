@@ -30,6 +30,11 @@ class ListProjectsResponse(BaseModel):
     items: list[ProjectResponse]
 
 
+class DeleteProjectResponse(BaseModel):
+    project_id: str
+    deleted_image_objects: int
+
+
 def _to_project_response(project: ProjectRecord) -> ProjectResponse:
     return ProjectResponse(
         project_id=project.project_id,
@@ -58,4 +63,16 @@ async def upsert_project(payload: UpsertProjectRequest, request: Request) -> Ups
         created_at=project.created_at,
         updated_at=project.updated_at,
         created=created,
+    )
+
+
+@router.delete("/projects/{project_id}", response_model=DeleteProjectResponse)
+async def delete_project(project_id: str, request: Request) -> DeleteProjectResponse:
+    repository: Repository = request.app.state.repository
+    result = repository.delete_project(project_id)
+    deleted_image_objects_raw = result.get("deleted_image_objects", 0)
+    deleted_image_objects = deleted_image_objects_raw if isinstance(deleted_image_objects_raw, int) else 0
+    return DeleteProjectResponse(
+        project_id=str(result.get("project_id", project_id)),
+        deleted_image_objects=deleted_image_objects,
     )

@@ -120,6 +120,8 @@
   display: grid;
   gap: 0.15rem;
   width: 100%;
+  flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   text-align: left;
@@ -138,6 +140,47 @@
 .sidebar__item--active .sidebar__item-btn {
   background: var(--accent-soft);
   border-left-color: var(--accent);
+}
+
+.sidebar__item-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.sidebar__item-delete {
+  width: 34px;
+  min-width: 34px;
+  border: none;
+  border-radius: 0;
+  border-left: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-color 100ms ease, color 100ms ease, opacity 120ms ease;
+}
+
+.sidebar__item-row:hover .sidebar__item-delete,
+.sidebar__item-row:focus-within .sidebar__item-delete {
+  opacity: 0.6;
+  pointer-events: auto;
+  border-left-color: var(--border);
+}
+
+.sidebar__item-delete:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-soft) 85%, transparent);
+  color: var(--danger);
+  opacity: 0.9;
+}
+
+.sidebar__item-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .sidebar__item-name {

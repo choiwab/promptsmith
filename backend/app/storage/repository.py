@@ -108,6 +108,40 @@ class Repository:
             )
         return _model_validate(ProjectRecord, payload)
 
+    def delete_project(self, project_id: str) -> dict[str, object]:
+        with self._lock:
+            self.get_project(project_id)
+            commit_payloads = self._safe_call("list commits", self.supabase_mirror.list_commits, project_id)
+            commits = [self._parse_commit(item) for item in commit_payloads]
+
+            artifact_delete_count = 0
+            for commit in commits:
+                for image_path in commit.image_paths:
+                    if self._delete_local_artifact(image_path):
+                        artifact_delete_count += 1
+                        continue
+                    object_path = self._extract_storage_object_path(image_path)
+                    if object_path:
+                        try:
+                            if self.supabase_mirror.delete_storage_object(object_path):
+                                artifact_delete_count += 1
+                        except Exception:
+                            # Best effort cleanup; project deletion should still proceed.
+                            pass
+
+            deleted = self._safe_call("delete project", self.supabase_mirror.delete_project, project_id)
+            if not deleted:
+                raise ApiError(
+                    ErrorCode.PROJECT_NOT_FOUND,
+                    f"Project '{project_id}' was not found.",
+                    status_code=404,
+                )
+
+            return {
+                "project_id": project_id,
+                "deleted_image_objects": artifact_delete_count,
+            }
+
     def create_commit(
         self,
         *,
