@@ -1,0 +1,14 @@
+{
+  "name": "promptsmith",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "pnpm --dir frontend install",
+    "install:frontend": "pnpm --dir frontend install",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "dev": "pnpm dev:frontend",
+    "build": "pnpm --dir frontend build",
+    "lint:frontend": "pnpm --dir frontend lint",
+    "test:frontend": "pnpm --dir frontend test"
+  }
+}
